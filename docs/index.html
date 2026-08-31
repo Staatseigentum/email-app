@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MailWave</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+        background: #0b0f1a;
+        color: #e2e8f0;
+        line-height: 1.65;
+      }
+      .wrap { max-width: 680px; margin: 0 auto; padding: 64px 24px 96px; }
+      h1 { font-size: 2rem; margin: 0 0 0.25rem; }
+      .lead { color: #94a3b8; margin-top: 0; }
+      .logo {
+        width: 56px; height: 56px; border-radius: 14px; margin-bottom: 20px;
+        background: linear-gradient(135deg, #598cff, #1f42f5);
+        display: grid; place-items: center; font-size: 26px;
+      }
+      a { color: #8eb5ff; }
+      h2 { margin-top: 2.5rem; font-size: 1.15rem; }
+      ul { padding-left: 1.2rem; }
+      footer { margin-top: 3rem; border-top: 1px solid #ffffff1a; padding-top: 1rem; color: #64748b; font-size: 0.9rem; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="logo">🌊</div>
+      <h1>MailWave</h1>
+      <p class="lead">Ein moderner Desktop-E-Mail-Client. Läuft vollständig lokal auf deinem Rechner.</p>
+
+      <h2>Was ist das?</h2>
+      <p>
+        MailWave ist eine Open-Source-Desktop-App (Electron), die sich direkt mit deinen
+        vorhandenen E-Mail-Postfächern verbindet – per IMAP/SMTP oder über die Anmeldung
+        bei Google bzw. Microsoft. Es gibt keinen MailWave-Server: alle Daten bleiben auf
+        deinem Gerät.
+      </p>
+
+      <h2>Funktionen</h2>
+      <ul>
+        <li>Mehrere Konten parallel</li>
+        <li>E-Mails lesen, schreiben, beantworten, weiterleiten</li>
+        <li>Desktop-Benachrichtigungen bei neuer Post</li>
+        <li>Browser-Login (OAuth) für Google und Microsoft</li>
+        <li>Zugangsdaten lokal über den System-Schlüsselbund verschlüsselt</li>
+      </ul>
+
+      <h2>Links</h2>
+      <ul>
+        <li><a href="https://github.com/Staatseigentum/email-app">Quellcode auf GitHub</a></li>
+        <li><a href="./privacy.html">Datenschutzerklärung</a></li>
+        <li><a href="./terms.html">Nutzungsbedingungen</a></li>
+      </ul>
+
+      <footer>
+        MailWave ist ein privates Open-Source-Projekt. Bereitgestellt „wie besehen",
+        ohne Gewähr.
+      </footer>
+    </div>
+  </body>
+</html>

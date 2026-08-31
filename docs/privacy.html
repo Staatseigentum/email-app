@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MailWave – Datenschutzerklärung</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+        background: #0b0f1a;
+        color: #e2e8f0;
+        line-height: 1.65;
+      }
+      .wrap { max-width: 680px; margin: 0 auto; padding: 64px 24px 96px; }
+      h1 { font-size: 1.7rem; }
+      h2 { margin-top: 2rem; font-size: 1.1rem; }
+      a { color: #8eb5ff; }
+      code { background: #ffffff14; padding: 1px 5px; border-radius: 4px; }
+      .muted { color: #94a3b8; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <p><a href="./">← MailWave</a></p>
+      <h1>Datenschutzerklärung</h1>
+      <p class="muted">Stand: August 2026</p>
+
+      <p>
+        MailWave ist eine Desktop-Anwendung, die vollständig lokal auf dem Gerät des
+        Nutzers läuft. Es gibt keinen von MailWave betriebenen Server.
+      </p>
+
+      <h2>Welche Daten verarbeitet werden</h2>
+      <p>
+        MailWave verbindet sich ausschließlich mit den E-Mail-Servern, die der Nutzer
+        selbst einrichtet (IMAP/SMTP), bzw. mit den Anmeldediensten von Google oder
+        Microsoft, wenn der Nutzer die Browser-Anmeldung wählt. Dabei werden E-Mail-Inhalte,
+        Ordner und Kontoinformationen vom jeweiligen Anbieter abgerufen und lokal
+        angezeigt.
+      </p>
+
+      <h2>Wohin Daten gesendet werden</h2>
+      <p>
+        Nur an den E-Mail-Anbieter des Nutzers. MailWave sendet <strong>keine</strong>
+        Daten an den Entwickler oder an Dritte. Es findet keine Analyse, kein Tracking und
+        keine Telemetrie statt.
+      </p>
+
+      <h2>Speicherung</h2>
+      <ul>
+        <li>
+          Zugangsdaten (Passwörter bzw. OAuth-Refresh-Token) werden lokal über den
+          Verschlüsselungsdienst des Betriebssystems gespeichert
+          (<code>safeStorage</code> / System-Schlüsselbund).
+        </li>
+        <li>
+          Kontoeinstellungen werden lokal im Anwendungsverzeichnis abgelegt.
+        </li>
+        <li>
+          E-Mail-Inhalte werden zur Anzeige geladen und nicht dauerhaft von MailWave
+          gespeichert (abgesehen von betriebssystem-/framework-eigenen temporären Caches).
+        </li>
+      </ul>
+
+      <h2>Google-API-Zugriff</h2>
+      <p>
+        Wird die Google-Anmeldung genutzt, fragt MailWave den Bereich
+        <code>https://mail.google.com/</code> an. Dieser Zugriff dient ausschließlich
+        dazu, im Auftrag des Nutzers auf dessen Gerät E-Mails abzurufen und zu senden.
+        Die Nutzung von Informationen aus Google-APIs erfolgt im Einklang mit der
+        <a href="https://developers.google.com/terms/api-services-user-data-policy"
+          >Google API Services User Data Policy</a
+        >, einschließlich der Limited-Use-Anforderungen. Es werden keine Google-Nutzerdaten
+        an Server des Entwicklers übertragen oder an Dritte weitergegeben.
+      </p>
+
+      <h2>Löschung</h2>
+      <p>
+        Durch Entfernen eines Kontos in der App bzw. Deinstallation der Anwendung werden
+        die lokal gespeicherten Zugangsdaten und Einstellungen gelöscht. Der Zugriff kann
+        zusätzlich im Google- bzw. Microsoft-Konto unter „Sicherheit → Drittanbieter-Apps"
+        widerrufen werden.
+      </p>
+
+      <h2>Kontakt</h2>
+      <p>
+        Fragen zum Datenschutz über das Projekt-Repository:
+        <a href="https://github.com/Staatseigentum/email-app">github.com/Staatseigentum/email-app</a>.
+      </p>
+    </div>
+  </body>
+</html>
