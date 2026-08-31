@@ -53,8 +53,9 @@ const body = {
 
 const release = await api('POST', `/repos/${repo}/releases`, body).catch(async (err) => {
   if (String(err).includes('already_exists')) {
-    console.log(`Release ${tag} existiert schon – hole es …`)
-    return api('GET', `/repos/${repo}/releases/tags/${tag}`)
+    console.log(`Release ${tag} existiert schon – aktualisiere Metadaten …`)
+    const existing = await api('GET', `/repos/${repo}/releases/tags/${tag}`)
+    return api('PATCH', `/repos/${repo}/releases/${existing.id}`, body)
   }
   throw err
 })
