@@ -5,8 +5,13 @@ Ein moderner Desktop-E-Mail-Client auf Basis von **Electron + React + TypeScript
 ## Funktionen
 
 - **Mehrere Konten** – beliebig viele IMAP/SMTP-Postfächer parallel, jedes mit eigener
-  Absenderadresse und -name. Serverdaten für Gmail, Outlook, iCloud, GMX, web.de, Yahoo
-  und Zoho werden anhand der E-Mail-Adresse automatisch erkannt.
+  Absenderadresse und -name. Anbieter-Auswahl mit fertigen Serverdaten (Gmail, Outlook,
+  GMX, web.de, iCloud, Yahoo, T-Online, mailbox.org, Posteo, Zoho) oder freie IMAP-Eingabe.
+- **Browser-Login (OAuth)** für Google und Microsoft – Anmeldung im Standardbrowser,
+  ohne Passwort in der App. Einrichtung: [docs/OAUTH-SETUP.md](docs/OAUTH-SETUP.md).
+- **Geführter Passwort-Flow** für Anbieter ohne OAuth – die Kachel öffnet direkt die
+  richtige Seite zum IMAP-Aktivieren bzw. App-Passwort-Erstellen.
+- **Demo-Postfach** – voll funktionsfähiges Offline-Konto zum Ausprobieren, ohne Server.
 - **E-Mails schreiben & senden** – Verfassen-Fenster mit An/Cc/Bcc, Antworten, Allen
   antworten und Weiterleiten (inkl. Zitat).
 - **Posteingang lesen** – Ordnerliste mit Ungelesen-Zählern, Nachrichtenliste mit
