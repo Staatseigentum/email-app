@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+.drag {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* schlanke Scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(148 163 184 / 0.35);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(148 163 184 / 0.55);
+  background-clip: content-box;
+}
+
+.mail-html {
+  color: inherit;
+  line-height: 1.6;
+  word-break: break-word;
+}
+.mail-html a {
+  color: #3563ff;
+  text-decoration: underline;
+}
+.mail-html img {
+  max-width: 100%;
+  height: auto;
+}
+.mail-html blockquote {
+  border-left: 3px solid rgb(148 163 184 / 0.5);
+  margin: 0.5rem 0;
+  padding-left: 0.75rem;
+  color: rgb(100 116 139);
+}
