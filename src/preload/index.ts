@@ -12,7 +12,10 @@ import type {
   NewMailEvent,
   OAuthClientConfig,
   OAuthProvider,
-  OAuthResult
+  OAuthResult,
+  TempMailbox,
+  UpdateEvent,
+  UpdateInfo
 } from '../shared/types'
 
 const api = {
@@ -34,13 +37,41 @@ const api = {
       ipcRenderer.invoke(IPC.message, id, mailbox, uid),
     markSeen: (id: string, mailbox: string, uid: number, value: boolean): Promise<IpcResult<void>> =>
       ipcRenderer.invoke(IPC.markSeen, id, mailbox, uid, value),
+    markAllSeen: (id: string, mailbox: string): Promise<IpcResult<void>> =>
+      ipcRenderer.invoke(IPC.markAllSeen, id, mailbox),
     flag: (id: string, mailbox: string, uid: number, value: boolean): Promise<IpcResult<void>> =>
       ipcRenderer.invoke(IPC.flag, id, mailbox, uid, value),
     remove: (id: string, mailbox: string, uid: number): Promise<IpcResult<void>> =>
       ipcRenderer.invoke(IPC.deleteMessage, id, mailbox, uid),
+    saveAttachment: (
+      id: string,
+      mailbox: string,
+      uid: number,
+      index: number
+    ): Promise<IpcResult<{ saved: boolean; path?: string }>> =>
+      ipcRenderer.invoke(IPC.saveAttachment, id, mailbox, uid, index),
     send: (payload: ComposePayload): Promise<IpcResult<{ messageId: string }>> =>
       ipcRenderer.invoke(IPC.send, payload),
     sync: (id: string): Promise<IpcResult<boolean>> => ipcRenderer.invoke(IPC.sync, id)
+  },
+  temp: {
+    list: (): Promise<IpcResult<TempMailbox[]>> => ipcRenderer.invoke(IPC.tempList),
+    create: (): Promise<IpcResult<TempMailbox>> => ipcRenderer.invoke(IPC.tempCreate),
+    remove: (id: string): Promise<IpcResult<boolean>> => ipcRenderer.invoke(IPC.tempRemove, id),
+    activate: (id: string | null): Promise<IpcResult<boolean>> =>
+      ipcRenderer.invoke(IPC.tempActivate, id),
+    messages: (id: string): Promise<IpcResult<MessageSummary[]>> =>
+      ipcRenderer.invoke(IPC.tempMessages, id),
+    message: (id: string, uid: number): Promise<IpcResult<MessageDetail>> =>
+      ipcRenderer.invoke(IPC.tempMessage, id, uid),
+    markAllSeen: (id: string): Promise<IpcResult<void>> =>
+      ipcRenderer.invoke(IPC.tempMarkAllSeen, id),
+    saveAttachment: (
+      id: string,
+      uid: number,
+      index: number
+    ): Promise<IpcResult<{ saved: boolean; path?: string }>> =>
+      ipcRenderer.invoke(IPC.tempSaveAttachment, id, uid, index)
   },
   openExternal: (url: string): Promise<IpcResult<boolean>> =>
     ipcRenderer.invoke(IPC.openExternal, url),
@@ -56,6 +87,15 @@ const api = {
     }): Promise<IpcResult<OAuthClientConfig>> => ipcRenderer.invoke(IPC.oauthConfigSet, input),
     importGoogle: (): Promise<IpcResult<OAuthClientConfig>> =>
       ipcRenderer.invoke(IPC.oauthImportGoogle)
+  },
+  update: {
+    check: (): Promise<UpdateInfo | null> => ipcRenderer.invoke(IPC.updateCheck),
+    apply: (): Promise<void> => ipcRenderer.invoke(IPC.updateApply),
+    on: (cb: (e: UpdateEvent) => void): (() => void) => {
+      const handler = (_e: unknown, evt: UpdateEvent): void => cb(evt)
+      ipcRenderer.on(IPC.onUpdate, handler)
+      return () => ipcRenderer.removeListener(IPC.onUpdate, handler)
+    }
   },
   onStatus: (cb: (s: ConnectionStatus) => void): (() => void) => {
     const handler = (_e: unknown, s: ConnectionStatus): void => cb(s)

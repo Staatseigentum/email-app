@@ -19,6 +19,22 @@ body {
   overflow: hidden;
 }
 
+::selection {
+  background: rgb(53 99 255 / 0.25);
+}
+
+/* App-Hintergrund als sehr sanfter Verlauf */
+.app-bg {
+  background:
+    radial-gradient(120% 60% at 100% 0%, rgb(53 99 255 / 0.06), transparent 60%),
+    #f4f6fb;
+}
+.dark .app-bg {
+  background:
+    radial-gradient(120% 60% at 100% 0%, rgb(53 99 255 / 0.12), transparent 55%),
+    #0b0f1a;
+}
+
 .drag {
   -webkit-app-region: drag;
 }

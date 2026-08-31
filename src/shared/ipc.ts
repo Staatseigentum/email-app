@@ -7,8 +7,10 @@ export const IPC = {
   messages: 'mail:messages',
   message: 'mail:message',
   markSeen: 'mail:markSeen',
+  markAllSeen: 'mail:markAllSeen',
   flag: 'mail:flag',
   deleteMessage: 'mail:delete',
+  saveAttachment: 'mail:saveAttachment',
   send: 'mail:send',
   sync: 'mail:sync',
   openExternal: 'app:openExternal',
@@ -16,7 +18,20 @@ export const IPC = {
   oauthConfigGet: 'oauth:configGet',
   oauthConfigSet: 'oauth:configSet',
   oauthImportGoogle: 'oauth:importGoogle',
+  // Wegwerf-Postfach (mail.tm)
+  tempList: 'temp:list',
+  tempCreate: 'temp:create',
+  tempRemove: 'temp:remove',
+  tempActivate: 'temp:activate',
+  tempMessages: 'temp:messages',
+  tempMessage: 'temp:message',
+  tempMarkAllSeen: 'temp:markAllSeen',
+  tempSaveAttachment: 'temp:saveAttachment',
+  // Auto-Update
+  updateCheck: 'update:check',
+  updateApply: 'update:apply',
   // main -> renderer events
   onStatus: 'evt:status',
-  onNewMail: 'evt:newMail'
+  onNewMail: 'evt:newMail',
+  onUpdate: 'evt:update'
 } as const

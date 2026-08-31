@@ -23,6 +23,7 @@ interface DemoMessage {
   flagged: boolean
   html: string | null
   text: string
+  attachments?: { filename: string; contentType: string; size: number }[]
 }
 
 interface DemoData {
@@ -161,7 +162,7 @@ export class DemoConnection {
       date: msg.date,
       seen: msg.seen,
       flagged: msg.flagged,
-      hasAttachments: false,
+      hasAttachments: (msg.attachments?.length ?? 0) > 0,
       snippet: msg.text.replace(/\s+/g, ' ').trim().slice(0, 200)
     }
   }
@@ -204,8 +205,23 @@ export class DemoConnection {
       cc: msg.cc,
       html: msg.html,
       text: msg.text,
-      attachments: []
+      attachments: (msg.attachments ?? []).map((a, index) => ({ ...a, index }))
     }
+  }
+
+  async downloadAttachment(): Promise<{ filename: string; content: Buffer }> {
+    throw new Error('Anhänge sind im Demo-Postfach nicht speicherbar.')
+  }
+
+  async markAllSeen(mailbox: string): Promise<void> {
+    let changed = false
+    for (const m of this.data.messages) {
+      if (m.mailbox === mailbox && !m.seen) {
+        m.seen = true
+        changed = true
+      }
+    }
+    if (changed) this.persist()
   }
 
   async setFlag(
@@ -247,7 +263,12 @@ export class DemoConnection {
       seen: true,
       flagged: false,
       html: null,
-      text: payload.text
+      text: payload.text,
+      attachments: payload.attachments?.map((a) => ({
+        filename: a.filename,
+        contentType: a.contentType || 'application/octet-stream',
+        size: Math.floor((a.contentBase64.length * 3) / 4)
+      }))
     })
     this.persist()
 

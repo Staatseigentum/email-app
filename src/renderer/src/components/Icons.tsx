@@ -98,3 +98,62 @@ export const IconChevron = (p: P) => (
     <path d="m9 18 6-6-6-6" />
   </svg>
 )
+export const IconClock = (p: P) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  </svg>
+)
+export const IconCopy = (p: P) => (
+  <svg {...base(p)}>
+    <rect x="9" y="9" width="12" height="12" rx="2" />
+    <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+  </svg>
+)
+export const IconCheck = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M20 6 9 17l-5-5" />
+  </svg>
+)
+export const IconCheckAll = (p: P) => (
+  <svg {...base(p)}>
+    <path d="m3 12 4 4L15 8" />
+    <path d="m11 14 2 2L21 8" />
+  </svg>
+)
+export const IconDownload = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M12 3v12" />
+    <path d="m7 12 5 5 5-5" />
+    <path d="M5 21h14" />
+  </svg>
+)
+export const IconFile = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M14 3v5h5" />
+    <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+  </svg>
+)
+export const IconDensity = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M3 5h18M3 12h18M3 19h18" />
+  </svg>
+)
+export const IconSun = (p: P) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+  </svg>
+)
+export const IconMoon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
+  </svg>
+)
+export const IconMore = (p: P) => (
+  <svg {...base(p)} fill="currentColor" stroke="none">
+    <circle cx="5" cy="12" r="1.6" />
+    <circle cx="12" cy="12" r="1.6" />
+    <circle cx="19" cy="12" r="1.6" />
+  </svg>
+)

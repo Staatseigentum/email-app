@@ -1,17 +1,29 @@
 {
   "name": "mailwave",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "MailWave – ein moderner Desktop-E-Mail-Client",
   "main": "./out/main/index.js",
   "author": "Marco Ebner",
   "license": "MIT",
   "type": "commonjs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Staatseigentum/email-app.git"
+  },
+  "mailwave": {
+    "appId": "de.marcoebner.mailwave",
+    "productName": "MailWave",
+    "publisher": "Marco Ebner",
+    "updateRepo": "Staatseigentum/email-app"
+  },
   "scripts": {
     "dev": "node scripts/evite.mjs dev",
     "build": "node scripts/evite.mjs build",
     "start": "node scripts/evite.mjs preview",
-    "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder",
+    "icon": "node scripts/gen-icon.mjs",
+    "pack": "npm run build && node scripts/pack-app.mjs",
+    "installer": "npm run pack && node scripts/build-installer.mjs",
+    "release": "node scripts/publish-release.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
   },
   "dependencies": {
@@ -27,7 +39,6 @@
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "electron": "^33.2.1",
-    "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
     "postcss": "^8.4.49",
     "react": "^18.3.1",

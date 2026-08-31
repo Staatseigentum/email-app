@@ -1,6 +1,7 @@
 import type { ConnectionStatus, MailAccount, MailboxNode } from '../../../shared/types'
 import {
   IconArchive,
+  IconClock,
   IconInbox,
   IconPencil,
   IconPlus,
@@ -46,7 +47,9 @@ export function Sidebar(props: {
   onSelectAccount: (id: string) => void
   mailboxes: MailboxNode[]
   activeMailbox: string
+  view: 'mail' | 'temp'
   onSelectMailbox: (path: string) => void
+  onOpenTemp: () => void
   onCompose: () => void
   onAddAccount: () => void
   onDemo: () => void
@@ -77,7 +80,7 @@ export function Sidebar(props: {
 
       <nav className="no-drag mt-4 flex-1 space-y-0.5 overflow-y-auto px-3 pb-3">
         {sortBoxes(props.mailboxes).map((box) => {
-          const isActive = box.path === props.activeMailbox
+          const isActive = props.view === 'mail' && box.path === props.activeMailbox
           return (
             <button
               key={box.path}
@@ -103,6 +106,21 @@ export function Sidebar(props: {
         {props.mailboxes.length === 0 && (
           <p className="px-2.5 py-2 text-xs text-slate-400">Ordner werden geladen…</p>
         )}
+
+        <div className="my-2 border-t border-slate-200/70 dark:border-white/10" />
+        <button
+          onClick={props.onOpenTemp}
+          className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition ${
+            props.view === 'temp'
+              ? 'bg-brand-500/10 font-semibold text-brand-600 dark:text-brand-300'
+              : 'text-slate-600 hover:bg-slate-200/60 dark:text-slate-300 dark:hover:bg-white/5'
+          }`}
+        >
+          <span className={props.view === 'temp' ? 'text-brand-500' : 'text-slate-400'}>
+            <IconClock />
+          </span>
+          <span className="truncate">Wegwerf-Postfach</span>
+        </button>
       </nav>
 
       <div className="no-drag border-t border-slate-200 p-3 dark:border-white/10">
@@ -163,13 +181,6 @@ export function Sidebar(props: {
             title="Demo-Postfach"
           >
             Demo
-          </button>
-          <button
-            onClick={props.onToggleTheme}
-            className="rounded-lg px-2 py-1.5 text-xs text-slate-500 transition hover:bg-slate-200/60 dark:hover:bg-white/5"
-            title="Design wechseln"
-          >
-            {props.theme === 'dark' ? '☀️' : '🌙'}
           </button>
         </div>
         {active?.name && (

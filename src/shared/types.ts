@@ -60,11 +60,26 @@ export interface MessageSummary {
   snippet: string
 }
 
+export interface MessageAttachment {
+  filename: string
+  contentType: string
+  size: number
+  /** Index innerhalb der Nachricht – für „Anhang speichern". */
+  index: number
+}
+
 export interface MessageDetail extends MessageSummary {
   html: string | null
   text: string | null
   cc: string[]
-  attachments: { filename: string; contentType: string; size: number }[]
+  attachments: MessageAttachment[]
+}
+
+export interface OutgoingAttachment {
+  filename: string
+  contentType: string
+  /** Datei-Inhalt als Base64. */
+  contentBase64: string
 }
 
 export interface ComposePayload {
@@ -76,6 +91,14 @@ export interface ComposePayload {
   text: string
   inReplyTo?: string
   references?: string
+  attachments?: OutgoingAttachment[]
+}
+
+/** Wegwerf-Postfach (mail.tm) – öffentliche Felder ohne Geheimnisse. */
+export interface TempMailbox {
+  id: string
+  address: string
+  createdAt: string
 }
 
 export interface ConnectionStatus {
@@ -91,3 +114,17 @@ export interface NewMailEvent {
 }
 
 export type IpcResult<T> = { ok: true; data: T } | { ok: false; error: string }
+
+export interface UpdateInfo {
+  version: string
+  notes: string
+  url: string
+  size: number
+}
+
+export type UpdateEvent =
+  | { state: 'none' }
+  | { state: 'available'; info: UpdateInfo }
+  | { state: 'downloading'; info: UpdateInfo; progress: number }
+  | { state: 'ready'; info: UpdateInfo }
+  | { state: 'error'; message: string }

@@ -33,12 +33,42 @@ npm run build      # Produktions-Bundle nach out/
 npm start          # gebautes Bundle starten
 ```
 
-## Paketieren
+## Paketieren & Installer
+
+Der Installer ist **komplett selbst gebaut** – kein electron-builder, kein NSIS, kein Inno.
+Die Setup-EXE ist ein kleines C#-Programm (kompiliert mit dem `csc.exe` aus dem
+.NET Framework, das auf jedem Windows vorhanden ist) mit der gepackten App als
+eingebetteter Ressource.
 
 ```bash
-npm run pack   # entpacktes Verzeichnis (release/)
-npm run dist   # Installer (NSIS / dmg / AppImage)
+npm run icon       # build/icon.ico + icon.png erzeugen (ohne Bildbibliothek)
+npm run pack       # portablen App-Ordner bauen → release/MailWave/
+npm run installer  # pack + release/MailWave-Setup-<version>.exe
+npm run release    # GitHub-Release anlegen und die Setup-EXE hochladen
 ```
+
+**Installation** (`MailWave-Setup-<version>.exe`):
+
+- pro Benutzer nach `%LOCALAPPDATA%\Programs\MailWave`, **ohne Administratorrechte**
+- Start-Menü- (und optional Desktop-) Verknüpfung, Eintrag unter *Apps & Features*
+- `Uninstall.exe` im Installationsordner entfernt alles wieder (Konten/Einstellungen
+  unter `%APPDATA%\mailwave` bleiben auf Wunsch erhalten)
+- Flags: `/S` still, `/S /update` still ohne App-Neustart, `/D=C:\Pfad` Zielordner
+
+### Automatische Updates
+
+Die App fragt beim Start (und alle 6 h) das neueste GitHub-Release ab. Ist eine
+neuere Version da, erscheint eine Meldung mit *Jetzt aktualisieren*. Dann:
+
+1. die neue Setup-EXE wird nach `%TEMP%` geladen
+2. der mitgelieferte **Bootstrap-Updater** (`Updater.exe`) wird nach `%TEMP%` kopiert
+   und gestartet
+3. MailWave beendet sich, der Updater führt `Setup.exe /S /update` aus und startet
+   die App neu
+
+Das Repo für die Update-Prüfung steht in `package.json` unter `mailwave.updateRepo`.
+
+Quellcode des Installers: [`installer/`](installer/) · Build-Skripte: [`scripts/`](scripts/)
 
 ## Architektur
 

@@ -163,12 +163,14 @@ export class AccountConnection {
     const range = `${since}:*`
     for await (const msg of client.fetch(
       range,
-      { uid: true, envelope: true, flags: true, bodyStructure: true },
+      { uid: true, envelope: true, flags: true, bodyStructure: true, bodyParts: ['1'] },
       { uid: true }
     )) {
       if (msg.uid <= this.lastUid) continue
       this.lastUid = msg.uid
       const summary = summaryFromFetch(msg)
+      const part = msg.bodyParts?.get('1')
+      if (part) summary.snippet = decodeSnippet(part.toString('utf-8'))
       this.bus.emit('newMail', {
         accountId: this.accountId,
         mailbox: 'INBOX',
@@ -250,12 +252,42 @@ export class AccountConnection {
         snippet: decodeSnippet(parsed.text),
         html: typeof parsed.html === 'string' ? parsed.html : null,
         text: parsed.text ?? null,
-        attachments: (parsed.attachments ?? []).map((a) => ({
+        attachments: (parsed.attachments ?? []).map((a, index) => ({
           filename: a.filename || 'anhang',
           contentType: a.contentType || 'application/octet-stream',
-          size: a.size || 0
+          size: a.size || 0,
+          index
         }))
       }
+    } finally {
+      lock.release()
+    }
+  }
+
+  /** Lädt einen einzelnen Anhang einer Nachricht als Buffer (für „Anhang speichern"). */
+  async downloadAttachment(
+    mailbox: string,
+    uid: number,
+    index: number
+  ): Promise<{ filename: string; content: Buffer }> {
+    const client = await this.ensureWork()
+    const lock = await client.getMailboxLock(mailbox)
+    try {
+      const { content } = await client.download(String(uid), undefined, { uid: true })
+      const parsed = await simpleParser(content)
+      const att = parsed.attachments?.[index]
+      if (!att) throw new Error('Anhang nicht gefunden')
+      return { filename: att.filename || 'anhang', content: att.content as Buffer }
+    } finally {
+      lock.release()
+    }
+  }
+
+  async markAllSeen(mailbox: string): Promise<void> {
+    const client = await this.ensureWork()
+    const lock = await client.getMailboxLock(mailbox)
+    try {
+      await client.messageFlagsAdd('1:*', ['\\Seen'], { uid: true })
     } finally {
       lock.release()
     }

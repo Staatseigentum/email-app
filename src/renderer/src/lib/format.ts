@@ -50,6 +50,20 @@ export function avatarColor(seed: string): string {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
 }
 
+/** Grobe Zeitgruppe für Listen-Zwischenüberschriften. */
+export function dateGroup(iso: string): string {
+  const d = new Date(iso)
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const t = d.getTime()
+  if (t >= startOfToday) return 'Heute'
+  if (t >= startOfToday - 86_400_000) return 'Gestern'
+  if (t >= startOfToday - 7 * 86_400_000) return 'Diese Woche'
+  if (d.getFullYear() === now.getFullYear())
+    return d.toLocaleDateString('de-DE', { month: 'long' })
+  return String(d.getFullYear())
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`

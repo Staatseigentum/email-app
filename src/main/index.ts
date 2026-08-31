@@ -1,7 +1,9 @@
 import { app, BrowserWindow, nativeTheme, shell } from 'electron'
 import { join } from 'path'
-import { registerIpc } from './ipc'
+import { registerIpc, tempMail } from './ipc'
 import { mailManager } from './mail/manager'
+import { notificationIconPath } from './assets'
+import { initUpdater } from './updater'
 
 const isDev = !app.isPackaged
 
@@ -14,6 +16,7 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0b0f1a' : '#f5f7fb',
+    icon: notificationIconPath() || undefined,
     titleBarStyle: 'hiddenInset',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -46,6 +49,7 @@ function createWindow(): void {
 app.whenReady().then(async () => {
   app.setAppUserModelId('de.marcoebner.mailwave')
   registerIpc()
+  initUpdater()
   createWindow()
   await mailManager.startAll()
 
@@ -60,4 +64,5 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
   void mailManager.stopAll()
+  tempMail.stop()
 })

@@ -8,14 +8,18 @@ import type {
   MessageSummary
 } from '../../shared/types'
 import { Sidebar } from './components/Sidebar'
-import { MessageList } from './components/MessageList'
+import { MessageList, type Density } from './components/MessageList'
 import { MessageView } from './components/MessageView'
 import { ComposeModal, type ComposeSeed } from './components/ComposeModal'
 import { AccountModal } from './components/AccountModal'
 import { Onboarding } from './components/Onboarding'
-import { IconRefresh, IconSearch } from './components/Icons'
+import { TopBar } from './components/TopBar'
+import { TempMailView } from './components/TempMailView'
+import { Toasts, type Toast, type ToastTone } from './components/Toasts'
 
 const api = window.mailwave
+
+let toastSeq = 0
 
 export default function App(): JSX.Element {
   const [accounts, setAccounts] = useState<MailAccount[]>([])
@@ -31,7 +35,13 @@ export default function App(): JSX.Element {
   const [query, setQuery] = useState('')
   const [compose, setCompose] = useState<ComposeSeed | null>(null)
   const [accountModal, setAccountModal] = useState<{ account?: MailAccount } | null>(null)
-  const [toast, setToast] = useState<string | null>(null)
+  const [toasts, setToasts] = useState<Toast[]>([])
+  const [view, setView] = useState<'mail' | 'temp'>('mail')
+  const [checked, setChecked] = useState<Set<number>>(new Set())
+  const [tempTick, setTempTick] = useState(0)
+  const [density, setDensity] = useState<Density>(
+    (localStorage.getItem('density') as Density) || 'cozy'
+  )
   const [theme, setTheme] = useState<'dark' | 'light'>(
     (localStorage.getItem('theme') as 'dark' | 'light') || 'dark'
   )
@@ -51,15 +61,26 @@ export default function App(): JSX.Element {
     localStorage.setItem('theme', theme)
   }, [theme])
 
+  useEffect(() => {
+    localStorage.setItem('density', density)
+  }, [density])
+
   const toggleTheme = useCallback(
     () => setTheme((t) => (t === 'dark' ? 'light' : 'dark')),
     []
   )
 
-  const showToast = useCallback((msg: string) => {
-    setToast(msg)
-    setTimeout(() => setToast(null), 4000)
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id))
   }, [])
+
+  const pushToast = useCallback(
+    (text: string, tone: ToastTone = 'info', action?: Toast['action']) => {
+      const id = `t${++toastSeq}`
+      setToasts((prev) => [...prev.slice(-3), { id, text, tone, action }])
+    },
+    []
+  )
 
   const loadAccounts = useCallback(async () => {
     const res = await api.accounts.list()
@@ -84,11 +105,55 @@ export default function App(): JSX.Element {
       if (res.ok) setMessages(res.data)
       else {
         setMessages([])
-        showToast(`Ordner konnte nicht geladen werden: ${res.error}`)
+        pushToast(`Ordner konnte nicht geladen werden: ${res.error}`, 'error')
       }
     },
-    [showToast]
+    [pushToast]
   )
+
+  const openMessageIn = useCallback(
+    async (accountId: string, mailbox: string, uid: number) => {
+      setSelectedUid(uid)
+      setLoadingDetail(true)
+      setDetail(null)
+      const res = await api.mail.message(accountId, mailbox, uid)
+      setLoadingDetail(false)
+      if (res.ok) {
+        setDetail(res.data)
+        setMessages((prev) => prev.map((m) => (m.uid === uid ? { ...m, seen: true } : m)))
+        api.mail.markSeen(accountId, mailbox, uid, true)
+        loadMailboxes(accountId)
+      } else {
+        pushToast(`Nachricht konnte nicht geladen werden: ${res.error}`, 'error')
+      }
+    },
+    [loadMailboxes, pushToast]
+  )
+
+  const openMessage = useCallback(
+    (uid: number) => {
+      if (!activeAccountId) return
+      void openMessageIn(activeAccountId, mailboxRef.current, uid)
+    },
+    [activeAccountId, openMessageIn]
+  )
+
+  useEffect(() => {
+    const off = api.update.on((evt) => {
+      if (evt.state === 'available') {
+        pushToast(`MailWave ${evt.info.version} ist verfügbar.`, 'info', {
+          label: 'Jetzt aktualisieren',
+          onClick: () => {
+            pushToast('Update wird geladen … die App startet gleich neu.', 'info')
+            void api.update.apply()
+          }
+        })
+      } else if (evt.state === 'error') {
+        pushToast(`Update-Prüfung fehlgeschlagen: ${evt.message}`, 'error')
+      }
+    })
+    return off
+  }, [pushToast])
 
   useEffect(() => {
     loadAccounts()
@@ -96,6 +161,17 @@ export default function App(): JSX.Element {
       setStatuses((prev) => ({ ...prev, [s.accountId]: s.state }))
     )
     const offMail = api.onNewMail((evt) => {
+      if (evt.accountId.startsWith('temp:')) {
+        setTempTick((n) => n + 1)
+        if (!(evt as { focus?: boolean }).focus) {
+          pushToast(`Neue E-Mail im Wegwerf-Postfach: ${evt.message.subject}`, 'info', {
+            label: 'Öffnen',
+            onClick: () => setView('temp')
+          })
+        }
+        return
+      }
+
       if (
         evt.accountId === activeAccountIdRef.current &&
         evt.mailbox === mailboxRef.current
@@ -107,18 +183,35 @@ export default function App(): JSX.Element {
       const accId = activeAccountIdRef.current
       if (accId) loadMailboxes(accId)
       const acc = accountsRef.current.find((a) => a.id === evt.accountId)
-      showToast(`Neue E-Mail · ${acc?.label ?? ''}: ${evt.message.subject}`)
+
+      if ((evt as { focus?: boolean }).focus) {
+        setView('mail')
+        setActiveAccountId(evt.accountId)
+        setActiveMailbox(evt.mailbox)
+        void openMessageIn(evt.accountId, evt.mailbox, evt.message.uid)
+        return
+      }
+      pushToast(`Neue E-Mail · ${acc?.label ?? ''}: ${evt.message.subject}`, 'info', {
+        label: 'Öffnen',
+        onClick: () => {
+          setView('mail')
+          setActiveAccountId(evt.accountId)
+          setActiveMailbox(evt.mailbox)
+          void openMessageIn(evt.accountId, evt.mailbox, evt.message.uid)
+        }
+      })
     })
     return () => {
       offStatus()
       offMail()
     }
-  }, [loadAccounts, loadMailboxes, showToast])
+  }, [loadAccounts, loadMailboxes, openMessageIn, pushToast])
 
   useEffect(() => {
     if (!activeAccountId) return
     setSelectedUid(null)
     setDetail(null)
+    setChecked(new Set())
     setActiveMailbox('INBOX')
     loadMailboxes(activeAccountId)
     loadMessages(activeAccountId, 'INBOX')
@@ -127,33 +220,14 @@ export default function App(): JSX.Element {
   const openMailbox = useCallback(
     (path: string) => {
       if (!activeAccountId) return
+      setView('mail')
       setActiveMailbox(path)
       setSelectedUid(null)
       setDetail(null)
+      setChecked(new Set())
       loadMessages(activeAccountId, path)
     },
     [activeAccountId, loadMessages]
-  )
-
-  const openMessage = useCallback(
-    async (uid: number) => {
-      if (!activeAccountId) return
-      const mailbox = mailboxRef.current
-      setSelectedUid(uid)
-      setLoadingDetail(true)
-      setDetail(null)
-      const res = await api.mail.message(activeAccountId, mailbox, uid)
-      setLoadingDetail(false)
-      if (res.ok) {
-        setDetail(res.data)
-        setMessages((prev) => prev.map((m) => (m.uid === uid ? { ...m, seen: true } : m)))
-        api.mail.markSeen(activeAccountId, mailbox, uid, true)
-        loadMailboxes(activeAccountId)
-      } else {
-        showToast(`Nachricht konnte nicht geladen werden: ${res.error}`)
-      }
-    },
-    [activeAccountId, loadMailboxes, showToast]
   )
 
   const toggleFlag = useCallback(
@@ -174,30 +248,87 @@ export default function App(): JSX.Element {
         setSelectedUid((cur) => (cur === uid ? null : cur))
         setDetail((cur) => (cur?.uid === uid ? null : cur))
         loadMailboxes(activeAccountId)
-      } else showToast(`Löschen fehlgeschlagen: ${res.error}`)
+      } else pushToast(`Löschen fehlgeschlagen: ${res.error}`, 'error')
     },
-    [activeAccountId, loadMailboxes, showToast]
+    [activeAccountId, loadMailboxes, pushToast]
+  )
+
+  const markAllSeen = useCallback(async () => {
+    if (!activeAccountId) return
+    setMessages((prev) => prev.map((m) => ({ ...m, seen: true })))
+    const res = await api.mail.markAllSeen(activeAccountId, mailboxRef.current)
+    if (res.ok) {
+      loadMailboxes(activeAccountId)
+      pushToast('Alle als gelesen markiert', 'success')
+    } else pushToast(`Fehlgeschlagen: ${res.error}`, 'error')
+  }, [activeAccountId, loadMailboxes, pushToast])
+
+  const toggleCheck = useCallback((uid: number) => {
+    setChecked((prev) => {
+      const next = new Set(prev)
+      if (next.has(uid)) next.delete(uid)
+      else next.add(uid)
+      return next
+    })
+  }, [])
+
+  const bulkMarkSeen = useCallback(async () => {
+    if (!activeAccountId) return
+    const ids = [...checked]
+    setMessages((prev) => prev.map((m) => (checked.has(m.uid) ? { ...m, seen: true } : m)))
+    setChecked(new Set())
+    await Promise.all(
+      ids.map((uid) => api.mail.markSeen(activeAccountId, mailboxRef.current, uid, true))
+    )
+    loadMailboxes(activeAccountId)
+  }, [activeAccountId, checked, loadMailboxes])
+
+  const bulkDelete = useCallback(async () => {
+    if (!activeAccountId) return
+    const ids = [...checked]
+    setMessages((prev) => prev.filter((m) => !checked.has(m.uid)))
+    setChecked(new Set())
+    setSelectedUid((cur) => (cur !== null && ids.includes(cur) ? null : cur))
+    await Promise.all(
+      ids.map((uid) => api.mail.remove(activeAccountId, mailboxRef.current, uid))
+    )
+    loadMailboxes(activeAccountId)
+  }, [activeAccountId, checked, loadMailboxes])
+
+  const saveAttachment = useCallback(
+    async (index: number) => {
+      if (!activeAccountId || selectedUid === null) return
+      const res = await api.mail.saveAttachment(
+        activeAccountId,
+        mailboxRef.current,
+        selectedUid,
+        index
+      )
+      if (res.ok && res.data.saved) pushToast('Anhang gespeichert', 'success')
+      else if (!res.ok) pushToast(`Speichern fehlgeschlagen: ${res.error}`, 'error')
+    },
+    [activeAccountId, selectedUid, pushToast]
   )
 
   const sync = useCallback(async () => {
     if (!activeAccountId) return
     await loadMailboxes(activeAccountId)
     await loadMessages(activeAccountId, mailboxRef.current)
-    showToast('Aktualisiert')
-  }, [activeAccountId, loadMailboxes, loadMessages, showToast])
+    pushToast('Aktualisiert', 'info')
+  }, [activeAccountId, loadMailboxes, loadMessages, pushToast])
 
   const handleSend = useCallback(
     async (payload: ComposePayload) => {
       const res = await api.mail.send(payload)
       if (res.ok) {
         setCompose(null)
-        showToast('E-Mail gesendet')
+        pushToast('E-Mail gesendet', 'success')
       } else {
-        showToast(`Senden fehlgeschlagen: ${res.error}`)
+        pushToast(`Senden fehlgeschlagen: ${res.error}`, 'error')
         throw new Error(res.error)
       }
     },
-    [showToast]
+    [pushToast]
   )
 
   const saveAccount = useCallback(
@@ -207,9 +338,9 @@ export default function App(): JSX.Element {
       setAccountModal(null)
       await loadAccounts()
       setActiveAccountId(res.data.id)
-      showToast('Konto gespeichert')
+      pushToast('Konto gespeichert', 'success')
     },
-    [loadAccounts, showToast]
+    [loadAccounts, pushToast]
   )
 
   const createDemoAccount = useCallback(async () => {
@@ -230,9 +361,9 @@ export default function App(): JSX.Element {
     if (res.ok) {
       await loadAccounts()
       setActiveAccountId(res.data.id)
-      showToast('Demo-Postfach erstellt')
-    } else showToast(`Fehler: ${res.error}`)
-  }, [accounts, loadAccounts, showToast])
+      pushToast('Demo-Postfach erstellt', 'success')
+    } else pushToast(`Fehler: ${res.error}`, 'error')
+  }, [accounts, loadAccounts, pushToast])
 
   const deleteAccount = useCallback(
     async (id: string) => {
@@ -308,17 +439,23 @@ export default function App(): JSX.Element {
 
   const activeMailboxName =
     mailboxes.find((m) => m.path === activeMailbox)?.name ?? activeMailbox
+  const unreadHere = messages.some((m) => !m.seen)
 
   return (
-    <div className="flex h-full w-full bg-slate-100 text-slate-900 dark:bg-[#0b0f1a] dark:text-slate-100">
+    <div className="app-bg flex h-full w-full text-slate-900 dark:text-slate-100">
       <Sidebar
         accounts={accounts}
         statuses={statuses}
         activeAccountId={activeAccountId}
-        onSelectAccount={setActiveAccountId}
+        onSelectAccount={(id) => {
+          setView('mail')
+          setActiveAccountId(id)
+        }}
         mailboxes={mailboxes}
         activeMailbox={activeMailbox}
+        view={view}
         onSelectMailbox={openMailbox}
+        onOpenTemp={() => setView('temp')}
         onCompose={() => activeAccount && setCompose({ accountId: activeAccount.id })}
         onAddAccount={() => setAccountModal({})}
         onDemo={createDemoAccount}
@@ -328,55 +465,59 @@ export default function App(): JSX.Element {
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="drag flex h-14 items-center gap-3 border-b border-slate-200 px-5 dark:border-white/10">
-          <h1 className="text-sm font-semibold capitalize text-slate-500 dark:text-slate-400">
-            {activeMailboxName}
-          </h1>
-          <div className="no-drag relative ml-auto w-72">
-            <IconSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Suchen…"
-              className="w-full rounded-lg border border-slate-200 bg-white/70 py-1.5 pl-9 pr-3 text-sm outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 dark:border-white/10 dark:bg-white/5"
-            />
-          </div>
-          <button
-            onClick={sync}
-            className="no-drag rounded-lg p-2 text-slate-500 transition hover:bg-slate-200 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white"
-            title="Aktualisieren"
-          >
-            <IconRefresh />
-          </button>
-        </header>
+        <TopBar
+          title={view === 'temp' ? 'Wegwerf-Postfach' : activeMailboxName}
+          subtitle={view === 'temp' ? undefined : activeAccount?.email}
+          query={query}
+          onQuery={setQuery}
+          onMarkAllSeen={view === 'temp' ? undefined : markAllSeen}
+          canMarkAllSeen={unreadHere}
+          onSync={sync}
+          density={density}
+          onToggleDensity={() => setDensity((d) => (d === 'cozy' ? 'compact' : 'cozy'))}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+        />
 
-        <div className="flex min-h-0 flex-1">
-          <MessageList
-            messages={filteredMessages}
-            loading={loadingList}
-            selectedUid={selectedUid}
-            onSelect={openMessage}
-            onToggleFlag={toggleFlag}
-            onDelete={deleteMessage}
-          />
-          <MessageView
-            detail={detail}
-            loading={loadingDetail}
-            hasSelection={selectedUid !== null}
-            onReply={() => replySeed('reply')}
-            onReplyAll={() => replySeed('replyAll')}
-            onForward={() => replySeed('forward')}
-            onDelete={() => selectedUid !== null && deleteMessage(selectedUid)}
+        {view === 'temp' ? (
+          <TempMailView
+            density={density}
+            newMailTick={tempTick}
+            onToast={(text, tone) => pushToast(text, tone)}
             onOpenExternal={(url) => api.openExternal(url)}
           />
-        </div>
+        ) : (
+          <div className="flex min-h-0 flex-1">
+            <MessageList
+              messages={filteredMessages}
+              loading={loadingList}
+              selectedUid={selectedUid}
+              density={density}
+              checked={checked}
+              onSelect={openMessage}
+              onToggleCheck={toggleCheck}
+              onClearChecked={() => setChecked(new Set())}
+              onBulkMarkSeen={bulkMarkSeen}
+              onBulkDelete={bulkDelete}
+              onToggleFlag={toggleFlag}
+              onDelete={deleteMessage}
+            />
+            <MessageView
+              detail={detail}
+              loading={loadingDetail}
+              hasSelection={selectedUid !== null}
+              onReply={() => replySeed('reply')}
+              onReplyAll={() => replySeed('replyAll')}
+              onForward={() => replySeed('forward')}
+              onDelete={() => selectedUid !== null && deleteMessage(selectedUid)}
+              onOpenExternal={(url) => api.openExternal(url)}
+              onSaveAttachment={saveAttachment}
+            />
+          </div>
+        )}
       </div>
 
-      {toast && (
-        <div className="animate-fade-in fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm text-white shadow-xl dark:bg-white dark:text-slate-900">
-          {toast}
-        </div>
-      )}
+      <Toasts toasts={toasts} onClose={dismissToast} />
 
       {compose && activeAccount && (
         <ComposeModal

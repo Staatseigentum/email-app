@@ -31,7 +31,12 @@ export async function sendMail(payload: ComposePayload): Promise<{ messageId: st
     subject: payload.subject,
     text: payload.text,
     inReplyTo: payload.inReplyTo || undefined,
-    references: payload.references || undefined
+    references: payload.references || undefined,
+    attachments: payload.attachments?.map((a) => ({
+      filename: a.filename,
+      content: Buffer.from(a.contentBase64, 'base64'),
+      contentType: a.contentType || undefined
+    }))
   })
 
   return { messageId: info.messageId }

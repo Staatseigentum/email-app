@@ -1,5 +1,5 @@
 import { BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron'
-import { readFileSync } from 'fs'
+import { readFileSync, writeFileSync } from 'fs'
 import { IPC } from '../shared/ipc'
 import type {
   ComposePayload,
@@ -13,8 +13,12 @@ import { mailManager } from './mail/manager'
 import { testConnection } from './mail/imapClient'
 import { sendMail, verifySmtp } from './mail/smtp'
 import { DemoConnection, isDemoAccount } from './mail/demo'
+import { TempMailService } from './mail/tempMail'
 import { runOAuth } from './oauth'
 import { oauthConfig, parseGoogleCredentials } from './oauthConfig'
+import { notificationIconPath } from './assets'
+
+export const tempMail = new TempMailService(mailManager)
 
 async function wrap<T>(fn: () => Promise<T>): Promise<IpcResult<T>> {
   try {
@@ -31,16 +35,39 @@ function broadcast(channel: string, payload: unknown): void {
   }
 }
 
+async function saveBufferWithDialog(
+  e: Electron.IpcMainInvokeEvent,
+  filename: string,
+  content: Buffer
+): Promise<{ saved: boolean; path?: string }> {
+  const win = BrowserWindow.fromWebContents(e.sender) ?? undefined
+  const picked = await dialog.showSaveDialog(win as BrowserWindow, {
+    title: 'Anhang speichern',
+    defaultPath: filename
+  })
+  if (picked.canceled || !picked.filePath) return { saved: false }
+  writeFileSync(picked.filePath, content)
+  return { saved: true, path: picked.filePath }
+}
+
 export function registerIpc(): void {
   mailManager.on('status', (s) => broadcast(IPC.onStatus, s))
   mailManager.on('newMail', (evt: NewMailEvent) => {
     broadcast(IPC.onNewMail, evt)
-    const acc = accountStore.get(evt.accountId)
+    const isTemp = evt.accountId.startsWith('temp:')
+    const acc = isTemp ? undefined : accountStore.get(evt.accountId)
+    const context = isTemp ? 'Wegwerf-Postfach' : acc?.label
     if (Notification.isSupported()) {
+      const preview = evt.message.snippet
+        ? `${evt.message.subject}\n${evt.message.snippet}`
+        : evt.message.subject
+      const icon = notificationIconPath()
       const n = new Notification({
-        title: `${evt.message.fromName}`,
-        body: evt.message.subject,
-        subtitle: acc?.label
+        title: evt.message.fromName,
+        body: preview,
+        subtitle: context,
+        silent: false,
+        ...(icon ? { icon } : {})
       })
       n.on('click', () => {
         const win = BrowserWindow.getAllWindows()[0]
@@ -130,12 +157,27 @@ export function registerIpc(): void {
     wrap(() => mailManager.get(id).setFlag(mailbox, uid, '\\Seen', value))
   )
 
+  ipcMain.handle(IPC.markAllSeen, (_e, id: string, mailbox: string) =>
+    wrap(() => mailManager.get(id).markAllSeen(mailbox))
+  )
+
   ipcMain.handle(IPC.flag, (_e, id: string, mailbox: string, uid: number, value: boolean) =>
     wrap(() => mailManager.get(id).setFlag(mailbox, uid, '\\Flagged', value))
   )
 
   ipcMain.handle(IPC.deleteMessage, (_e, id: string, mailbox: string, uid: number) =>
     wrap(() => mailManager.get(id).deleteMessage(mailbox, uid))
+  )
+
+  ipcMain.handle(
+    IPC.saveAttachment,
+    (e, id: string, mailbox: string, uid: number, index: number) =>
+      wrap(async () => {
+        const { filename, content } = await mailManager
+          .get(id)
+          .downloadAttachment(mailbox, uid, index)
+        return saveBufferWithDialog(e, filename, content)
+      })
   )
 
   ipcMain.handle(IPC.send, (_e, payload: ComposePayload) =>
@@ -160,6 +202,28 @@ export function registerIpc(): void {
     wrap(async () => {
       await shell.openExternal(url)
       return true
+    })
+  )
+
+  // ---- Wegwerf-Postfach (mail.tm) ----
+  ipcMain.handle(IPC.tempList, () => wrap(async () => tempMail.list()))
+  ipcMain.handle(IPC.tempCreate, () => wrap(() => tempMail.create()))
+  ipcMain.handle(IPC.tempRemove, (_e, id: string) => wrap(() => tempMail.remove(id)))
+  ipcMain.handle(IPC.tempActivate, (_e, id: string | null) =>
+    wrap(async () => {
+      tempMail.setActive(id)
+      return true
+    })
+  )
+  ipcMain.handle(IPC.tempMessages, (_e, id: string) => wrap(() => tempMail.messages(id)))
+  ipcMain.handle(IPC.tempMessage, (_e, id: string, uid: number) =>
+    wrap(() => tempMail.message(id, uid))
+  )
+  ipcMain.handle(IPC.tempMarkAllSeen, (_e, id: string) => wrap(() => tempMail.markAllSeen(id)))
+  ipcMain.handle(IPC.tempSaveAttachment, (e, id: string, uid: number, index: number) =>
+    wrap(async () => {
+      const { filename, content } = await tempMail.downloadAttachment(id, uid, index)
+      return saveBufferWithDialog(e, filename, content)
     })
   )
 }
