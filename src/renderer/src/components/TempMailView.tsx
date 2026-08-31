@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MessageDetail, MessageSummary, TempMailbox } from '../../../shared/types'
-import { MessageList, type Density } from './MessageList'
+import { MessageList, type Density, type ListFilter } from './MessageList'
 import { MessageView } from './MessageView'
 import { formatDate } from '../lib/format'
 import { IconCheck, IconClock, IconCopy, IconPlus, IconTrash } from './Icons'
@@ -24,6 +24,8 @@ export function TempMailView(props: {
   const [busy, setBusy] = useState<'create' | 'remove' | null>(null)
   const [copied, setCopied] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<ListFilter>('all')
 
   const activeIdRef = useRef<string | null>(null)
   activeIdRef.current = activeId
@@ -147,6 +149,19 @@ export function TempMailView(props: {
     await api.temp.markAllSeen(activeId)
   }, [activeId])
 
+  const visibleMessages = messages.filter((m) => {
+    if (filter === 'unread' && m.seen) return false
+    if (filter === 'flagged' && !m.flagged) return false
+    if (filter === 'attachments' && !m.hasAttachments) return false
+    const q = query.trim().toLowerCase()
+    if (!q) return true
+    return (
+      m.subject.toLowerCase().includes(q) ||
+      m.fromName.toLowerCase().includes(q) ||
+      m.snippet.toLowerCase().includes(q)
+    )
+  })
+
   if (boxes.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
@@ -261,12 +276,19 @@ export function TempMailView(props: {
 
       <div className="flex min-h-0 flex-1">
         <MessageList
-          messages={messages}
+          messages={visibleMessages}
           loading={loadingList}
           selectedUid={selectedUid}
-          density={props.density}
+          query={query}
+          filter={filter}
+          accountName={active?.address}
           checked={EMPTY}
+          selectMode={false}
           readOnly
+          onQuery={setQuery}
+          onFilter={setFilter}
+          onSync={() => activeId && void loadMessages(activeId)}
+          onToggleSelectMode={NOOP}
           onSelect={openMessage}
           onToggleCheck={NOOP}
           onClearChecked={NOOP}
@@ -279,6 +301,7 @@ export function TempMailView(props: {
           detail={detail}
           loading={loadingDetail}
           hasSelection={selectedUid !== null}
+          theme={document.documentElement.classList.contains('dark') ? 'dark' : 'light'}
           onReply={NOOP}
           onReplyAll={NOOP}
           onForward={NOOP}

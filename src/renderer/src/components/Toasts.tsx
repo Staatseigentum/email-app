@@ -1,26 +1,26 @@
 import { useEffect } from 'react'
-import { IconCheck, IconInbox, IconX } from './Icons'
+import { Icon, type IconName } from './Icon'
 
 export type ToastTone = 'info' | 'success' | 'error'
 
 export interface Toast {
   id: string
   text: string
+  title?: string
   tone?: ToastTone
   action?: { label: string; onClick: () => void }
 }
 
-const TONE: Record<ToastTone, { ring: string; icon: JSX.Element }> = {
-  info: { ring: 'ring-brand-500/30', icon: <IconInbox width={15} height={15} /> },
-  success: { ring: 'ring-emerald-500/30', icon: <IconCheck width={15} height={15} /> },
-  error: { ring: 'ring-rose-500/40', icon: <IconX width={15} height={15} /> }
+const TONE: Record<ToastTone, { icon: IconName; color: string }> = {
+  info: { icon: 'info', color: 'text-info' },
+  success: { icon: 'check-circle', color: 'text-ok' },
+  error: { icon: 'alert-triangle', color: 'text-bad' }
 }
 
 function ToastCard(props: { toast: Toast; onClose: (id: string) => void }): JSX.Element {
-  const { toast } = props
+  const { toast, onClose } = props
   const tone = TONE[toast.tone ?? 'info']
 
-  const { onClose } = props
   useEffect(() => {
     const ms = toast.tone === 'error' ? 7000 : 4500
     const t = setTimeout(() => onClose(toast.id), ms)
@@ -28,50 +28,36 @@ function ToastCard(props: { toast: Toast; onClose: (id: string) => void }): JSX.
   }, [toast.id, toast.tone, onClose])
 
   return (
-    <div
-      className={`animate-slide-in-right pointer-events-auto flex items-start gap-3 rounded-xl bg-white px-3.5 py-3 text-sm shadow-xl shadow-slate-900/10 ring-1 ${tone.ring} dark:bg-[#161d30] dark:shadow-black/50`}
-    >
-      <span
-        className={`mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full ${
-          toast.tone === 'error'
-            ? 'bg-rose-500/15 text-rose-500'
-            : toast.tone === 'success'
-              ? 'bg-emerald-500/15 text-emerald-500'
-              : 'bg-brand-500/15 text-brand-500'
-        }`}
-      >
-        {tone.icon}
-      </span>
-      <div className="min-w-0 flex-1 pt-0.5">
-        <p className="leading-snug text-slate-700 dark:text-slate-200">{toast.text}</p>
+    <div className="animate-toast-in pointer-events-auto flex w-[340px] items-start gap-2.5 rounded-lg border border-line bg-chrome p-3 shadow-popover">
+      <Icon name={tone.icon} size={16} className={`mt-0.5 shrink-0 ${tone.color}`} />
+      <div className="min-w-0 flex-1">
+        {toast.title && <p className="text-xs font-semibold text-ink">{toast.title}</p>}
+        <p className="text-xs leading-snug text-ink-soft">{toast.text}</p>
         {toast.action && (
           <button
             onClick={() => {
               toast.action?.onClick()
-              props.onClose(toast.id)
+              onClose(toast.id)
             }}
-            className="mt-1 text-xs font-semibold text-brand-600 hover:underline dark:text-brand-300"
+            className="mt-1 text-2xs font-semibold text-accent-text hover:underline"
           >
             {toast.action.label}
           </button>
         )}
       </div>
       <button
-        onClick={() => props.onClose(toast.id)}
-        className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10"
+        onClick={() => onClose(toast.id)}
+        className="shrink-0 rounded-[3px] p-0.5 text-ink-mute transition hover:text-ink"
       >
-        <IconX width={13} height={13} />
+        <Icon name="x" size={14} />
       </button>
     </div>
   )
 }
 
-export function Toasts(props: {
-  toasts: Toast[]
-  onClose: (id: string) => void
-}): JSX.Element {
+export function Toasts(props: { toasts: Toast[]; onClose: (id: string) => void }): JSX.Element {
   return (
-    <div className="pointer-events-none fixed bottom-5 right-5 z-[60] flex w-80 flex-col gap-2">
+    <div className="pointer-events-none fixed bottom-5 right-5 z-[70] flex flex-col gap-3">
       {props.toasts.map((t) => (
         <ToastCard key={t.id} toast={t} onClose={props.onClose} />
       ))}

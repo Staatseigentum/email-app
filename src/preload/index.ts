@@ -88,6 +88,11 @@ const api = {
     importGoogle: (): Promise<IpcResult<OAuthClientConfig>> =>
       ipcRenderer.invoke(IPC.oauthImportGoogle)
   },
+  win: {
+    minimize: (): void => ipcRenderer.send(IPC.winMinimize),
+    maximizeToggle: (): void => ipcRenderer.send(IPC.winMaximizeToggle),
+    close: (): void => ipcRenderer.send(IPC.winClose)
+  },
   update: {
     check: (): Promise<UpdateInfo | null> => ipcRenderer.invoke(IPC.updateCheck),
     apply: (): Promise<void> => ipcRenderer.invoke(IPC.updateApply),

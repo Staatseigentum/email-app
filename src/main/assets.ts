@@ -28,34 +28,72 @@ function chunk(type: string, data: Buffer): Buffer {
   return Buffer.concat([len, typeBuf, data, crc])
 }
 
-/** Erzeugt ein einfaches, hübsches App-Icon (blauer Verlauf, runde Ecken) als PNG-Buffer. */
+function distToSegment(
+  px: number,
+  py: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number
+): number {
+  const dx = bx - ax
+  const dy = by - ay
+  const len2 = dx * dx + dy * dy
+  let t = len2 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0
+  t = Math.max(0, Math.min(1, t))
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+}
+
+/** MailWave-Logo: violette Kachel (#8250f2) mit weißem „mail-check"-Zeichen. */
 function renderIcon(size = 256): Buffer {
   const px = Buffer.alloc(size * size * 4)
-  const radius = size * 0.22
-  // Verlauf von hellblau (#598cff) nach kräftigem Blau (#1f42f5), diagonal
-  const from = [0x59, 0x8c, 0xff]
-  const to = [0x1f, 0x42, 0xf5]
+  const radius = size * 0.2
+  const accent = [0x82, 0x50, 0xf2]
+
+  const ex0 = size * 0.24
+  const ex1 = size * 0.76
+  const ey0 = size * 0.3
+  const ey1 = size * 0.7
+  const cx = (ex0 + ex1) / 2
+  const flapY = ey0 + (ey1 - ey0) * 0.46
+  const stroke = size * 0.045
+
+  const segments: number[][] = [
+    [ex0, ey0, ex1, ey0],
+    [ex0, ey1, ex1, ey1],
+    [ex0, ey0, ex0, ey1],
+    [ex1, ey0, ex1, ey1],
+    [ex0, ey0, cx, flapY],
+    [cx, flapY, cx + (ex1 - cx) * 0.35, ey0 + (flapY - ey0) * 0.6],
+    [ex1 - (ex1 - ex0) * 0.16, ey0 - size * 0.02, ex1 - (ex1 - ex0) * 0.04, ey0 + size * 0.1],
+    [ex1 - (ex1 - ex0) * 0.04, ey0 + size * 0.1, ex1 + (ex1 - ex0) * 0.14, ey0 - size * 0.12]
+  ]
+
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const t = (x + y) / (2 * size)
-      let alpha = 255
-      // runde Ecken
-      const cx = Math.min(x, size - 1 - x)
-      const cy = Math.min(y, size - 1 - y)
-      if (cx < radius && cy < radius) {
-        const d = Math.hypot(radius - cx, radius - cy)
-        if (d > radius) alpha = 0
-        else if (d > radius - 1.5) alpha = Math.round(255 * (radius - d) / 1.5)
-      }
-      // dezente „Welle": heller Bogen quer über das Icon
-      let wave = 0
-      const wy = size * 0.5 + Math.sin((x / size) * Math.PI * 2) * size * 0.13
-      if (Math.abs(y - wy) < size * 0.06) wave = 40 * (1 - Math.abs(y - wy) / (size * 0.06))
       const i = (y * size + x) * 4
-      px[i] = Math.min(255, Math.round(from[0] + (to[0] - from[0]) * t) + wave)
-      px[i + 1] = Math.min(255, Math.round(from[1] + (to[1] - from[1]) * t) + wave)
-      px[i + 2] = Math.min(255, Math.round(from[2] + (to[2] - from[2]) * t) + wave)
-      px[i + 3] = alpha
+      let tileA = 1
+      const qx = Math.min(x, size - 1 - x)
+      const qy = Math.min(y, size - 1 - y)
+      if (qx < radius && qy < radius) {
+        const d = Math.hypot(radius - qx, radius - qy)
+        tileA = d > radius ? 0 : d > radius - 1.5 ? (radius - d) / 1.5 : 1
+      }
+      if (tileA <= 0) {
+        px[i + 3] = 0
+        continue
+      }
+      let md = Infinity
+      for (const s of segments) {
+        const d = distToSegment(x + 0.5, y + 0.5, s[0], s[1], s[2], s[3])
+        if (d < md) md = d
+      }
+      const half = stroke / 2
+      const markA = md <= half ? 1 : md <= half + 1.2 ? (half + 1.2 - md) / 1.2 : 0
+      px[i] = Math.round(accent[0] * (1 - markA) + 255 * markA)
+      px[i + 1] = Math.round(accent[1] * (1 - markA) + 255 * markA)
+      px[i + 2] = Math.round(accent[2] * (1 - markA) + 255 * markA)
+      px[i + 3] = Math.round(255 * tileA)
     }
   }
   // Scanlines mit Filter-Byte 0

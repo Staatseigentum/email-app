@@ -1,19 +1,23 @@
 import { useMemo, useState } from 'react'
 import type { MessageDetail } from '../../../shared/types'
 import { Avatar } from './Avatar'
-import { formatBytes, formatFullDate } from '../lib/format'
-import { IconDownload, IconFile, IconReply, IconSend, IconTrash } from './Icons'
+import { formatBytes, formatMetaDate } from '../lib/format'
+import { Icon } from './Icon'
 
-function buildSrcDoc(html: string): string {
+function buildSrcDoc(html: string, dark: boolean): string {
+  const fg = dark ? '#c2c8e6' : '#14183a'
+  const bg = dark ? '#030408' : '#ffffff'
+  const link = dark ? '#c3a9ff' : '#6b2fd6'
+  const quote = dark ? '#9aa3cd' : '#4b5280'
+  const border = dark ? 'rgba(154,163,205,.32)' : 'rgba(42,25,88,.24)'
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: https: http:; style-src 'unsafe-inline'; font-src data:;">
 <style>
-  /* E-Mail-Inhalt immer im hellen Schema darstellen, unabhängig von App- oder System-Theme */
-  :root { color-scheme: light; }
-  body { margin: 0; padding: 16px; font-family: Inter, 'Segoe UI', system-ui, sans-serif; font-size: 14px; line-height: 1.6; color: #0f172a; background: #fff; word-break: break-word; }
+  :root { color-scheme: ${dark ? 'dark' : 'light'}; }
+  body { margin: 0; padding: 24px 28px; font-family: 'DM Sans','Segoe UI',system-ui,sans-serif; font-size: 15px; line-height: 1.65; color: ${fg}; background: ${bg}; word-break: break-word; text-wrap: pretty; }
   img { max-width: 100%; height: auto; }
-  a { color: #3563ff; }
-  blockquote { border-left: 3px solid rgba(148,163,184,.5); margin: .5rem 0; padding-left: .75rem; color: #64748b; }
+  a { color: ${link}; }
+  blockquote { border-left: 2px solid ${border}; margin: .5rem 0; padding-left: .75rem; color: ${quote}; }
   table { max-width: 100%; }
 </style></head><body>${html}</body></html>`
 }
@@ -22,10 +26,12 @@ export function MessageView(props: {
   detail: MessageDetail | null
   loading: boolean
   hasSelection: boolean
+  theme: 'dark' | 'light'
   onReply: () => void
   onReplyAll: () => void
   onForward: () => void
   onDelete: () => void
+  onToggleFlag?: (value: boolean) => void
   onOpenExternal: (url: string) => void
   onSaveAttachment: (index: number) => Promise<void>
   readOnly?: boolean
@@ -43,119 +49,159 @@ export function MessageView(props: {
   }
 
   const srcDoc = useMemo(
-    () => (detail?.html ? buildSrcDoc(detail.html) : null),
-    [detail?.html, detail?.uid]
+    () => (detail?.html ? buildSrcDoc(detail.html, props.theme === 'dark') : null),
+    [detail?.html, detail?.uid, props.theme]
   )
 
   if (!props.hasSelection) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center text-slate-400">
-        <div className="grid h-16 w-16 place-items-center rounded-2xl bg-slate-200/60 dark:bg-white/5">
-          <IconSend width={26} height={26} />
-        </div>
-        <p className="text-sm">Wähle eine Nachricht aus, um sie zu lesen</p>
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-window text-center">
+        <Icon name="mail-open" size={20} className="text-ink-mute" />
+        <p className="text-sm text-ink-mute">Wähle links eine Nachricht.</p>
       </div>
     )
   }
 
   if (props.loading || !detail) {
     return (
-      <div className="flex flex-1 items-center justify-center text-sm text-slate-400">
-        Nachricht wird geladen…
+      <div className="flex flex-1 items-center justify-center bg-window text-sm text-ink-mute">
+        Nachricht wird geladen …
       </div>
     )
   }
 
+  const ghost =
+    'grid h-8 w-8 place-items-center rounded-[3px] text-ink-soft transition hover:bg-accent-soft hover:text-ink'
+
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
-      <div className="border-b border-slate-200 px-6 py-4 dark:border-white/10">
-        <div className="flex items-start gap-2">
-          <h2 className="flex-1 text-lg font-bold leading-snug">{detail.subject}</h2>
-          <div className={`flex shrink-0 gap-1 ${props.readOnly ? 'hidden' : ''}`}>
+    <div className="flex min-w-0 flex-1 flex-col bg-window">
+      {/* Aktionsleiste */}
+      {!props.readOnly && (
+        <div className="flex h-[52px] shrink-0 items-center gap-1.5 border-b border-line px-4">
+          <button
+            onClick={props.onReply}
+            className="flex h-8 items-center gap-1.5 rounded-[3px] border border-line-control px-3 text-sm font-medium text-ink transition hover:border-line-hover"
+          >
+            <Icon name="reply" size={14} /> Antworten
+          </button>
+          <button
+            onClick={props.onReplyAll}
+            className="flex h-8 items-center gap-1.5 rounded-[3px] px-2.5 text-sm text-ink-soft transition hover:bg-accent-soft hover:text-ink"
+          >
+            <Icon name="reply-all" size={14} /> Allen
+          </button>
+          <button
+            onClick={props.onForward}
+            className="flex h-8 items-center gap-1.5 rounded-[3px] px-2.5 text-sm text-ink-soft transition hover:bg-accent-soft hover:text-ink"
+          >
+            <Icon name="forward" size={14} /> Weiterleiten
+          </button>
+          <span className="mx-1.5 h-[18px] w-px bg-line-control" />
+          <button
+            onClick={() => props.onToggleFlag?.(!detail.flagged)}
+            className={`${ghost} ${detail.flagged ? 'text-warn' : ''}`}
+            title="Markieren"
+          >
+            <Icon name="star" size={15} />
+          </button>
+          <button onClick={props.onDelete} className={`${ghost} hover:text-bad`} title="Löschen">
+            <Icon name="trash-2" size={15} />
+          </button>
+          <span className="ml-auto font-mono text-2xs text-ink-mute">R · S</span>
+        </div>
+      )}
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-[640px] px-7 py-6">
+          <h1 className="font-display text-xl font-semibold tracking-[-0.012em] text-ink">
+            {detail.subject || '(kein Betreff)'}
+          </h1>
+
+          <div className="mt-4 flex items-center gap-3">
+            <Avatar name={detail.fromName || detail.fromAddress} size={40} emphasis />
+            <div className="min-w-0 flex-1">
+              <div className="text-base font-semibold text-ink">
+                {detail.fromName || detail.fromAddress}
+              </div>
+              <div className="truncate font-mono text-xs text-ink-mute">{detail.fromAddress}</div>
+            </div>
+            <span className="shrink-0 font-mono text-xs text-ink-mute">
+              {formatMetaDate(detail.date)}
+            </span>
+          </div>
+          <div className="mt-1 truncate text-xs text-ink-mute">
+            an <span className="font-mono">{detail.to.join(', ') || '—'}</span>
+            {detail.cc.length > 0 && (
+              <>
+                {' · Cc '}
+                <span className="font-mono">{detail.cc.join(', ')}</span>
+              </>
+            )}
+          </div>
+
+          {detail.attachments.length > 0 && (
+            <div className="mt-4 border-t border-line pt-3">
+              <p className="mb-2 text-2xs font-medium uppercase tracking-[0.09em] text-ink-mute">
+                Anhänge · {detail.attachments.length}
+              </p>
+              <div className="flex flex-wrap gap-2.5">
+                {detail.attachments.map((a) => (
+                  <button
+                    key={a.index}
+                    onClick={() => saveAttachment(a.index)}
+                    disabled={savingIndex !== null}
+                    className="flex w-[220px] items-center gap-2.5 rounded-lg border border-line bg-chrome p-2 text-left transition hover:border-line-hover disabled:opacity-60"
+                  >
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[3px] bg-accent-soft text-accent-text">
+                      <Icon name="file-text" size={16} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-medium text-ink">
+                        {a.filename}
+                      </span>
+                      <span className="block font-mono text-2xs text-ink-mute">
+                        {formatBytes(a.size)}
+                      </span>
+                    </span>
+                    <Icon
+                      name={savingIndex === a.index ? 'spinner' : 'download'}
+                      size={13}
+                      className={`shrink-0 text-ink-mute ${savingIndex === a.index ? 'animate-spin-slow' : ''}`}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="mt-5">
+            {srcDoc ? (
+              <iframe
+                title="E-Mail-Inhalt"
+                sandbox=""
+                srcDoc={srcDoc}
+                className="h-[calc(100vh-320px)] min-h-[300px] w-full rounded-lg border border-line"
+              />
+            ) : (
+              <pre className="mail-html whitespace-pre-wrap font-sans text-base text-ink">
+                {detail.text || '(kein Inhalt)'}
+              </pre>
+            )}
+          </div>
+
+          {!props.readOnly && (
             <button
               onClick={props.onReply}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium transition hover:bg-slate-100 dark:border-white/10 dark:hover:bg-white/10"
+              className="mt-6 flex w-full items-center gap-2 rounded-lg border border-line bg-panel px-3 py-2.5 text-left text-sm text-ink-mute transition hover:border-line-hover"
             >
-              <IconReply width={14} height={14} /> Antworten
+              <Icon name="corner-up-left" size={15} />
+              <span className="flex-1">Kurz antworten …</span>
+              <span className="rounded-[3px] border border-line-control px-1.5 py-0.5 font-mono text-2xs">
+                R
+              </span>
             </button>
-            <button
-              onClick={props.onReplyAll}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium transition hover:bg-slate-100 dark:border-white/10 dark:hover:bg-white/10"
-            >
-              Allen
-            </button>
-            <button
-              onClick={props.onForward}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium transition hover:bg-slate-100 dark:border-white/10 dark:hover:bg-white/10"
-            >
-              Weiterleiten
-            </button>
-            <button
-              onClick={props.onDelete}
-              className="rounded-lg border border-slate-200 p-1.5 text-slate-500 transition hover:border-rose-300 hover:text-rose-500 dark:border-white/10"
-              title="Löschen"
-            >
-              <IconTrash width={14} height={14} />
-            </button>
-          </div>
+          )}
         </div>
-
-        <div className="mt-3 flex items-center gap-3">
-          <Avatar name={detail.fromName} seed={detail.fromAddress} size={40} />
-          <div className="min-w-0 flex-1">
-            <div className="flex items-baseline gap-2">
-              <span className="font-semibold">{detail.fromName}</span>
-              <span className="truncate text-xs text-slate-400">&lt;{detail.fromAddress}&gt;</span>
-            </div>
-            <div className="truncate text-xs text-slate-400">
-              an {detail.to.join(', ') || '—'}
-              {detail.cc.length > 0 && ` · Cc: ${detail.cc.join(', ')}`}
-            </div>
-          </div>
-          <span className="shrink-0 text-xs text-slate-400">{formatFullDate(detail.date)}</span>
-        </div>
-
-        {detail.attachments.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {detail.attachments.map((a) => (
-              <button
-                key={a.index}
-                onClick={() => saveAttachment(a.index)}
-                disabled={savingIndex !== null}
-                className="group/att flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-2.5 pr-2 text-xs transition hover:border-brand-300 hover:bg-brand-500/5 disabled:opacity-60 dark:border-white/10 dark:bg-white/5"
-                title="Anhang speichern"
-              >
-                <IconFile width={13} height={13} className="shrink-0 text-slate-400" />
-                <span className="max-w-[220px] truncate font-medium">{a.filename}</span>
-                <span className="text-slate-400">{formatBytes(a.size)}</span>
-                {savingIndex === a.index ? (
-                  <span className="text-slate-400">…</span>
-                ) : (
-                  <IconDownload
-                    width={13}
-                    height={13}
-                    className="text-slate-400 transition group-hover/att:text-brand-500"
-                  />
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-hidden bg-white text-slate-900 [color-scheme:light]">
-        {srcDoc ? (
-          <iframe
-            title="E-Mail-Inhalt"
-            sandbox=""
-            srcDoc={srcDoc}
-            className="h-full w-full border-0 bg-white"
-          />
-        ) : (
-          <pre className="mail-html h-full overflow-y-auto whitespace-pre-wrap px-6 py-5 font-sans text-sm">
-            {detail.text || '(kein Inhalt)'}
-          </pre>
-        )}
       </div>
     </div>
   )

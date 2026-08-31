@@ -30,6 +30,10 @@ export const IPC = {
   // Auto-Update
   updateCheck: 'update:check',
   updateApply: 'update:apply',
+  // Fenstersteuerung (eigene Titelleiste)
+  winMinimize: 'win:minimize',
+  winMaximizeToggle: 'win:maximizeToggle',
+  winClose: 'win:close',
   // main -> renderer events
   onStatus: 'evt:status',
   onNewMail: 'evt:newMail',

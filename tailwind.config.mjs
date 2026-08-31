@@ -61,7 +61,15 @@ export default {
         ok: 'var(--ok)',
         warn: 'var(--warn)',
         bad: 'var(--bad)',
-        info: 'var(--info)'
+        info: 'var(--info)',
+        // Übergangs-Alias, bis Compose/AccountModal/OAuth auf Tokens migriert sind
+        brand: {
+          300: 'var(--accent-text)',
+          400: 'var(--accent-hover)',
+          500: 'var(--accent)',
+          600: 'var(--accent-hover)',
+          700: 'var(--accent-pressed)'
+        }
       },
       boxShadow: {
         glow: 'var(--glow)',

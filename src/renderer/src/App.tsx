@@ -7,13 +7,16 @@ import type {
   MessageDetail,
   MessageSummary
 } from '../../shared/types'
+import { AccountRail } from './components/AccountRail'
+import { AccountPopover } from './components/AccountPopover'
 import { Sidebar } from './components/Sidebar'
-import { MessageList, type Density } from './components/MessageList'
+import { MessageList, type Density, type ListFilter } from './components/MessageList'
 import { MessageView } from './components/MessageView'
 import { ComposeModal, type ComposeSeed } from './components/ComposeModal'
 import { AccountModal } from './components/AccountModal'
 import { Onboarding } from './components/Onboarding'
-import { TopBar } from './components/TopBar'
+import { TitleBar } from './components/TitleBar'
+import { StatusBar } from './components/StatusBar'
 import { TempMailView } from './components/TempMailView'
 import { Toasts, type Toast, type ToastTone } from './components/Toasts'
 
@@ -24,6 +27,7 @@ let toastSeq = 0
 export default function App(): JSX.Element {
   const [accounts, setAccounts] = useState<MailAccount[]>([])
   const [statuses, setStatuses] = useState<Record<string, ConnectionStatus['state']>>({})
+  const [statusMsg, setStatusMsg] = useState<Record<string, string | undefined>>({})
   const [activeAccountId, setActiveAccountId] = useState<string | null>(null)
   const [mailboxes, setMailboxes] = useState<MailboxNode[]>([])
   const [activeMailbox, setActiveMailbox] = useState('INBOX')
@@ -33,15 +37,17 @@ export default function App(): JSX.Element {
   const [loadingList, setLoadingList] = useState(false)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [query, setQuery] = useState('')
+  const [listFilter, setListFilter] = useState<ListFilter>('all')
+  const [selectMode, setSelectMode] = useState(false)
   const [compose, setCompose] = useState<ComposeSeed | null>(null)
   const [accountModal, setAccountModal] = useState<{ account?: MailAccount } | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
-  const [view, setView] = useState<'mail' | 'temp'>('mail')
+  const [view, setView] = useState<'mail' | 'temp' | 'settings'>('mail')
+  const [accountPopover, setAccountPopover] = useState(false)
   const [checked, setChecked] = useState<Set<number>>(new Set())
   const [tempTick, setTempTick] = useState(0)
-  const [density, setDensity] = useState<Density>(
-    (localStorage.getItem('density') as Density) || 'cozy'
-  )
+  const [lastSync, setLastSync] = useState<string | undefined>()
+  const [density] = useState<Density>((localStorage.getItem('density') as Density) || 'cozy')
   const [theme, setTheme] = useState<'dark' | 'light'>(
     (localStorage.getItem('theme') as 'dark' | 'light') || 'dark'
   )
@@ -60,10 +66,6 @@ export default function App(): JSX.Element {
     document.documentElement.classList.toggle('dark', theme === 'dark')
     localStorage.setItem('theme', theme)
   }, [theme])
-
-  useEffect(() => {
-    localStorage.setItem('density', density)
-  }, [density])
 
   const toggleTheme = useCallback(
     () => setTheme((t) => (t === 'dark' ? 'light' : 'dark')),
@@ -102,8 +104,10 @@ export default function App(): JSX.Element {
       const res = await api.mail.messages(accountId, mailbox, 0)
       if (reqId !== listReqId.current) return
       setLoadingList(false)
-      if (res.ok) setMessages(res.data)
-      else {
+      if (res.ok) {
+        setMessages(res.data)
+        setLastSync(new Date().toISOString())
+      } else {
         setMessages([])
         pushToast(`Ordner konnte nicht geladen werden: ${res.error}`, 'error')
       }
@@ -157,9 +161,10 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     loadAccounts()
-    const offStatus = api.onStatus((s) =>
+    const offStatus = api.onStatus((s) => {
       setStatuses((prev) => ({ ...prev, [s.accountId]: s.state }))
-    )
+      setStatusMsg((prev) => ({ ...prev, [s.accountId]: s.message }))
+    })
     const offMail = api.onNewMail((evt) => {
       if (evt.accountId.startsWith('temp:')) {
         setTempTick((n) => n + 1)
@@ -234,6 +239,7 @@ export default function App(): JSX.Element {
     async (uid: number, value: boolean) => {
       if (!activeAccountId) return
       setMessages((prev) => prev.map((m) => (m.uid === uid ? { ...m, flagged: value } : m)))
+      setDetail((cur) => (cur?.uid === uid ? { ...cur, flagged: value } : cur))
       await api.mail.flag(activeAccountId, mailboxRef.current, uid, value)
     },
     [activeAccountId]
@@ -252,16 +258,6 @@ export default function App(): JSX.Element {
     },
     [activeAccountId, loadMailboxes, pushToast]
   )
-
-  const markAllSeen = useCallback(async () => {
-    if (!activeAccountId) return
-    setMessages((prev) => prev.map((m) => ({ ...m, seen: true })))
-    const res = await api.mail.markAllSeen(activeAccountId, mailboxRef.current)
-    if (res.ok) {
-      loadMailboxes(activeAccountId)
-      pushToast('Alle als gelesen markiert', 'success')
-    } else pushToast(`Fehlgeschlagen: ${res.error}`, 'error')
-  }, [activeAccountId, loadMailboxes, pushToast])
 
   const toggleCheck = useCallback((uid: number) => {
     setChecked((prev) => {
@@ -314,8 +310,7 @@ export default function App(): JSX.Element {
     if (!activeAccountId) return
     await loadMailboxes(activeAccountId)
     await loadMessages(activeAccountId, mailboxRef.current)
-    pushToast('Aktualisiert', 'info')
-  }, [activeAccountId, loadMailboxes, loadMessages, pushToast])
+  }, [activeAccountId, loadMailboxes, loadMessages])
 
   const handleSend = useCallback(
     async (payload: ComposePayload) => {
@@ -347,6 +342,7 @@ export default function App(): JSX.Element {
     const existing = accounts.find((a) => a.imap.host === 'demo')
     if (existing) {
       setActiveAccountId(existing.id)
+      setView('mail')
       return
     }
     const res = await api.accounts.save({
@@ -361,6 +357,7 @@ export default function App(): JSX.Element {
     if (res.ok) {
       await loadAccounts()
       setActiveAccountId(res.data.id)
+      setView('mail')
       pushToast('Demo-Postfach erstellt', 'success')
     } else pushToast(`Fehler: ${res.error}`, 'error')
   }, [accounts, loadAccounts, pushToast])
@@ -374,18 +371,6 @@ export default function App(): JSX.Element {
     },
     [loadAccounts]
   )
-
-  const filteredMessages = useMemo(() => {
-    if (!query.trim()) return messages
-    const q = query.toLowerCase()
-    return messages.filter(
-      (m) =>
-        m.subject.toLowerCase().includes(q) ||
-        m.fromName.toLowerCase().includes(q) ||
-        m.fromAddress.toLowerCase().includes(q) ||
-        m.snippet.toLowerCase().includes(q)
-    )
-  }, [messages, query])
 
   const replySeed = useCallback(
     (mode: 'reply' | 'replyAll' | 'forward'): void => {
@@ -416,15 +401,63 @@ export default function App(): JSX.Element {
     [detail, activeAccount]
   )
 
+  const filteredMessages = useMemo(() => {
+    let list = messages
+    if (listFilter === 'unread') list = list.filter((m) => !m.seen)
+    else if (listFilter === 'flagged') list = list.filter((m) => m.flagged)
+    else if (listFilter === 'attachments') list = list.filter((m) => m.hasAttachments)
+    const q = query.trim().toLowerCase()
+    if (!q) return list
+    return list.filter(
+      (m) =>
+        m.subject.toLowerCase().includes(q) ||
+        m.fromName.toLowerCase().includes(q) ||
+        m.fromAddress.toLowerCase().includes(q) ||
+        m.snippet.toLowerCase().includes(q)
+    )
+  }, [messages, query, listFilter])
+
+  const unreadByAccount = useMemo(() => {
+    const map: Record<string, number> = {}
+    if (activeAccountId) {
+      const inbox = mailboxes.find((m) => m.specialUse === '\\Inbox' || m.path === 'INBOX')
+      if (inbox) map[activeAccountId] = inbox.unseen
+    }
+    return map
+  }, [activeAccountId, mailboxes])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      const tag = (e.target as HTMLElement)?.tagName
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
+        e.preventDefault()
+        if (activeAccount) setCompose({ accountId: activeAccount.id })
+        return
+      }
+      if (typing || compose || accountModal) return
+      if (e.key === 'r' && detail) replySeed('reply')
+      else if (e.key === 'e' && detail) replySeed('replyAll')
+      else if (e.key === 'f' && detail) replySeed('forward')
+      else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedUid !== null)
+        void deleteMessage(selectedUid)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [activeAccount, compose, accountModal, detail, selectedUid, replySeed, deleteMessage])
+
   if (accounts.length === 0) {
     return (
-      <>
-        <Onboarding
-          onAdd={() => setAccountModal({})}
-          onDemo={createDemoAccount}
-          theme={theme}
-          onToggleTheme={toggleTheme}
-        />
+      <div className="flex h-full w-full flex-col">
+        <TitleBar />
+        <div className="min-h-0 flex-1">
+          <Onboarding
+            onAdd={() => setAccountModal({})}
+            onDemo={createDemoAccount}
+            theme={theme}
+            onToggleTheme={toggleTheme}
+          />
+        </div>
         {accountModal && (
           <AccountModal
             account={accountModal.account}
@@ -433,50 +466,69 @@ export default function App(): JSX.Element {
             onTest={(i) => api.accounts.test(i)}
           />
         )}
-      </>
+      </div>
     )
   }
 
   const activeMailboxName =
     mailboxes.find((m) => m.path === activeMailbox)?.name ?? activeMailbox
-  const unreadHere = messages.some((m) => !m.seen)
+  const state = activeAccountId ? statuses[activeAccountId] ?? 'connecting' : 'offline'
+  const totalUnread = mailboxes.reduce((n, m) => n + m.unseen, 0)
+  const context =
+    view === 'temp'
+      ? 'Wegwerf-Postfach'
+      : view === 'settings'
+        ? 'Einstellungen'
+        : activeAccount
+          ? `${activeAccount.label} — ${activeMailboxName}`
+          : undefined
 
   return (
-    <div className="app-bg flex h-full w-full text-slate-900 dark:text-slate-100">
-      <Sidebar
-        accounts={accounts}
-        statuses={statuses}
-        activeAccountId={activeAccountId}
-        onSelectAccount={(id) => {
-          setView('mail')
-          setActiveAccountId(id)
-        }}
-        mailboxes={mailboxes}
-        activeMailbox={activeMailbox}
-        view={view}
-        onSelectMailbox={openMailbox}
-        onOpenTemp={() => setView('temp')}
-        onCompose={() => activeAccount && setCompose({ accountId: activeAccount.id })}
-        onAddAccount={() => setAccountModal({})}
-        onDemo={createDemoAccount}
-        onEditAccount={(a) => setAccountModal({ account: a })}
-        theme={theme}
-        onToggleTheme={toggleTheme}
-      />
+    <div className="flex h-full w-full flex-col bg-window text-ink">
+      <TitleBar context={context} />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar
-          title={view === 'temp' ? 'Wegwerf-Postfach' : activeMailboxName}
-          subtitle={view === 'temp' ? undefined : activeAccount?.email}
-          query={query}
-          onQuery={setQuery}
-          onMarkAllSeen={view === 'temp' ? undefined : markAllSeen}
-          canMarkAllSeen={unreadHere}
-          onSync={sync}
-          density={density}
-          onToggleDensity={() => setDensity((d) => (d === 'cozy' ? 'compact' : 'cozy'))}
+      <div className="relative flex min-h-0 flex-1">
+        <AccountRail
+          accounts={accounts}
+          statuses={statuses}
+          activeAccountId={activeAccountId}
+          unreadByAccount={unreadByAccount}
+          view={view}
+          onSelect={(id) => {
+            setView('mail')
+            setActiveAccountId(id)
+          }}
+          onActiveClick={() => setAccountPopover((v) => !v)}
+          onAdd={() => setAccountModal({})}
+          onSettings={() => setView('settings')}
           theme={theme}
           onToggleTheme={toggleTheme}
+        />
+
+        {accountPopover && (
+          <AccountPopover
+            accounts={accounts}
+            statuses={statuses}
+            activeAccountId={activeAccountId}
+            unreadByAccount={unreadByAccount}
+            onSelect={(id) => {
+              setView('mail')
+              setActiveAccountId(id)
+            }}
+            onAdd={() => setAccountModal({})}
+            onManage={() => setView('settings')}
+            onClose={() => setAccountPopover(false)}
+          />
+        )}
+
+        <Sidebar
+          mailboxes={mailboxes}
+          activeMailbox={activeMailbox}
+          view={view}
+          onSelectMailbox={openMailbox}
+          onOpenTemp={() => setView('temp')}
+          onCompose={() => activeAccount && setCompose({ accountId: activeAccount.id })}
+          onOpenPalette={() => pushToast('Command-Palette folgt in Kürze.', 'info')}
         />
 
         {view === 'temp' ? (
@@ -486,14 +538,32 @@ export default function App(): JSX.Element {
             onToast={(text, tone) => pushToast(text, tone)}
             onOpenExternal={(url) => api.openExternal(url)}
           />
+        ) : view === 'settings' ? (
+          <SettingsPlaceholder
+            accounts={accounts}
+            onEdit={(a) => setAccountModal({ account: a })}
+            onAdd={() => setAccountModal({})}
+            onDemo={createDemoAccount}
+            onClose={() => setView('mail')}
+          />
         ) : (
           <div className="flex min-h-0 flex-1">
             <MessageList
               messages={filteredMessages}
               loading={loadingList}
               selectedUid={selectedUid}
-              density={density}
+              query={query}
+              filter={listFilter}
+              accountName={activeAccount?.label}
               checked={checked}
+              selectMode={selectMode}
+              onQuery={setQuery}
+              onFilter={setListFilter}
+              onSync={sync}
+              onToggleSelectMode={() => {
+                setSelectMode((v) => !v)
+                setChecked(new Set())
+              }}
               onSelect={openMessage}
               onToggleCheck={toggleCheck}
               onClearChecked={() => setChecked(new Set())}
@@ -506,16 +576,33 @@ export default function App(): JSX.Element {
               detail={detail}
               loading={loadingDetail}
               hasSelection={selectedUid !== null}
+              theme={theme}
               onReply={() => replySeed('reply')}
               onReplyAll={() => replySeed('replyAll')}
               onForward={() => replySeed('forward')}
               onDelete={() => selectedUid !== null && deleteMessage(selectedUid)}
+              onToggleFlag={(v) => selectedUid !== null && toggleFlag(selectedUid, v)}
               onOpenExternal={(url) => api.openExternal(url)}
               onSaveAttachment={saveAttachment}
             />
           </div>
         )}
       </div>
+
+      <StatusBar
+        state={state}
+        message={activeAccountId ? statusMsg[activeAccountId] : undefined}
+        server={
+          activeAccount && activeAccount.imap.host !== 'demo'
+            ? `${activeAccount.imap.host}:${activeAccount.imap.port}`
+            : undefined
+        }
+        lastSync={lastSync}
+        unread={totalUnread}
+        accountCount={accounts.length}
+        onReconnect={() => activeAccountId && api.mail.sync(activeAccountId)}
+        onCommand={() => pushToast('Command-Palette folgt in Kürze.', 'info')}
+      />
 
       <Toasts toasts={toasts} onClose={dismissToast} />
 
@@ -537,6 +624,65 @@ export default function App(): JSX.Element {
           onTest={(i) => api.accounts.test(i)}
         />
       )}
+    </div>
+  )
+}
+
+/** Schlichte Einstellungen-Ansicht bis der vollständige Screen 09 folgt. */
+function SettingsPlaceholder(props: {
+  accounts: MailAccount[]
+  onEdit: (a: MailAccount) => void
+  onAdd: () => void
+  onDemo: () => void
+  onClose: () => void
+}): JSX.Element {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col bg-window">
+      <div className="flex h-[52px] shrink-0 items-center gap-2 border-b border-line px-6">
+        <h1 className="font-display text-lg font-semibold text-ink">Einstellungen</h1>
+        <button
+          onClick={props.onClose}
+          className="ml-auto text-sm text-ink-soft transition hover:text-ink"
+        >
+          Fertig
+        </button>
+      </div>
+      <div className="mx-auto w-full max-w-[640px] flex-1 overflow-y-auto px-7 py-6">
+        <p className="mb-2 text-2xs font-medium uppercase tracking-[0.09em] text-ink-mute">Konten</p>
+        <div className="space-y-2">
+          {props.accounts.map((a) => (
+            <div
+              key={a.id}
+              className="flex items-center gap-3 rounded-lg border border-line bg-panel p-3"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold text-ink">{a.label}</div>
+                <div className="truncate font-mono text-xs text-ink-mute">{a.email}</div>
+              </div>
+              <button
+                onClick={() => props.onEdit(a)}
+                className="rounded-[3px] border border-line-control px-3 py-1.5 text-xs text-ink transition hover:border-line-hover"
+              >
+                Bearbeiten
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex gap-2">
+          <button
+            onClick={props.onAdd}
+            className="rounded-[3px] border border-line-control px-3 py-1.5 text-xs text-ink transition hover:border-line-hover"
+          >
+            Konto hinzufügen
+          </button>
+          <button
+            onClick={props.onDemo}
+            className="rounded-[3px] px-3 py-1.5 text-xs text-ink-soft transition hover:text-ink"
+          >
+            Demo-Postfach
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

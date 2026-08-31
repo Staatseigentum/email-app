@@ -51,6 +51,15 @@ async function saveBufferWithDialog(
 }
 
 export function registerIpc(): void {
+  ipcMain.on(IPC.winMinimize, (e) => BrowserWindow.fromWebContents(e.sender)?.minimize())
+  ipcMain.on(IPC.winMaximizeToggle, (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    if (!win) return
+    if (win.isMaximized()) win.unmaximize()
+    else win.maximize()
+  })
+  ipcMain.on(IPC.winClose, (e) => BrowserWindow.fromWebContents(e.sender)?.close())
+
   mailManager.on('status', (s) => broadcast(IPC.onStatus, s))
   mailManager.on('newMail', (evt: NewMailEvent) => {
     broadcast(IPC.onNewMail, evt)

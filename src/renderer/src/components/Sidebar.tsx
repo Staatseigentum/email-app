@@ -1,36 +1,29 @@
-import type { ConnectionStatus, MailAccount, MailboxNode } from '../../../shared/types'
-import {
-  IconArchive,
-  IconClock,
-  IconInbox,
-  IconPencil,
-  IconPlus,
-  IconSend,
-  IconSettings,
-  IconStar,
-  IconTrash
-} from './Icons'
-
-const STATUS_COLOR: Record<ConnectionStatus['state'], string> = {
-  online: 'bg-emerald-500',
-  connecting: 'bg-amber-400 animate-pulse',
-  offline: 'bg-slate-400',
-  error: 'bg-rose-500'
-}
-
-function mailboxIcon(box: MailboxNode): JSX.Element {
-  const key = (box.specialUse || box.name).toLowerCase()
-  if (key.includes('sent') || key.includes('gesendet')) return <IconSend />
-  if (key.includes('trash') || key.includes('papierkorb') || key.includes('deleted'))
-    return <IconTrash />
-  if (key.includes('junk') || key.includes('spam')) return <IconArchive />
-  if (key.includes('flag') || key.includes('markiert') || key.includes('star'))
-    return <IconStar />
-  if (key.includes('archiv')) return <IconArchive />
-  return <IconInbox />
-}
+import type { MailboxNode } from '../../../shared/types'
+import { Icon, type IconName } from './Icon'
+import { overline } from '../lib/ui'
 
 const ORDER = ['\\Inbox', '\\Sent', '\\Drafts', '\\Junk', '\\Trash', '\\Archive']
+
+const SPECIAL: Record<string, { name: string; icon: IconName }> = {
+  '\\Inbox': { name: 'Posteingang', icon: 'inbox' },
+  '\\Sent': { name: 'Gesendet', icon: 'send' },
+  '\\Drafts': { name: 'Entwürfe', icon: 'file-text' },
+  '\\Junk': { name: 'Spam', icon: 'shield-alert' },
+  '\\Trash': { name: 'Papierkorb', icon: 'trash-2' },
+  '\\Archive': { name: 'Archiv', icon: 'archive' }
+}
+
+function boxMeta(box: MailboxNode): { name: string; icon: IconName } {
+  if (box.specialUse && SPECIAL[box.specialUse]) return SPECIAL[box.specialUse]
+  const key = (box.specialUse || box.name).toLowerCase()
+  if (key.includes('sent') || key.includes('gesendet')) return { name: box.name, icon: 'send' }
+  if (key.includes('trash') || key.includes('papierkorb')) return { name: box.name, icon: 'trash-2' }
+  if (key.includes('junk') || key.includes('spam')) return { name: box.name, icon: 'shield-alert' }
+  if (key.includes('draft') || key.includes('entw')) return { name: box.name, icon: 'file-text' }
+  if (key.includes('archiv')) return { name: box.name, icon: 'archive' }
+  return { name: box.name, icon: 'inbox' }
+}
+
 function sortBoxes(boxes: MailboxNode[]): MailboxNode[] {
   return [...boxes].sort((a, b) => {
     const ai = a.specialUse ? ORDER.indexOf(a.specialUse) : 99
@@ -40,153 +33,98 @@ function sortBoxes(boxes: MailboxNode[]): MailboxNode[] {
   })
 }
 
+function Row(props: {
+  icon: IconName
+  label: string
+  count?: number
+  active: boolean
+  onClick: () => void
+}): JSX.Element {
+  return (
+    <button
+      onClick={props.onClick}
+      className={`relative flex h-[30px] w-full items-center gap-2.5 rounded-[3px] px-2 text-sm transition ${
+        props.active
+          ? 'bg-accent-soft font-medium text-ink'
+          : 'text-ink-soft hover:bg-chrome-2 hover:text-ink'
+      }`}
+    >
+      {props.active && (
+        <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-accent" />
+      )}
+      <Icon name={props.icon} size={15} className={props.active ? 'text-accent-text' : ''} />
+      <span className="truncate">{props.label}</span>
+      {props.count ? (
+        <span
+          className={`ml-auto font-mono text-xs ${props.active ? 'text-accent-text' : 'text-ink-mute'}`}
+        >
+          {props.count}
+        </span>
+      ) : null}
+    </button>
+  )
+}
+
 export function Sidebar(props: {
-  accounts: MailAccount[]
-  statuses: Record<string, ConnectionStatus['state']>
-  activeAccountId: string | null
-  onSelectAccount: (id: string) => void
   mailboxes: MailboxNode[]
   activeMailbox: string
-  view: 'mail' | 'temp'
+  view: 'mail' | 'temp' | 'settings'
   onSelectMailbox: (path: string) => void
   onOpenTemp: () => void
   onCompose: () => void
-  onAddAccount: () => void
-  onDemo: () => void
-  onEditAccount: (a: MailAccount) => void
-  theme: 'dark' | 'light'
-  onToggleTheme: () => void
+  onOpenPalette: () => void
 }): JSX.Element {
-  const active = props.accounts.find((a) => a.id === props.activeAccountId)
-
+  const mailActive = props.view === 'mail'
   return (
-    <aside className="drag flex w-64 shrink-0 flex-col border-r border-slate-200 bg-white/60 backdrop-blur dark:border-white/10 dark:bg-white/[0.03]">
-      <div className="flex h-14 items-center gap-2 px-5">
-        <div className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 text-white">
-          <IconSend width={15} height={15} />
-        </div>
-        <span className="text-[15px] font-bold tracking-tight">MailWave</span>
-      </div>
-
-      <div className="no-drag px-3">
+    <aside className="flex w-[236px] shrink-0 flex-col border-r border-line bg-panel">
+      <div className="p-3">
         <button
           onClick={props.onCompose}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-600/25 transition hover:brightness-110 active:scale-[0.98]"
+          className="flex h-[38px] w-full items-center justify-center gap-2 rounded-[3px] bg-accent text-sm font-semibold text-accent-on shadow-glow transition-[filter,transform] duration-[80ms] hover:bg-accent-hover active:translate-y-px"
         >
-          <IconPencil width={16} height={16} />
+          <Icon name="pencil" size={15} />
           Neue E-Mail
         </button>
       </div>
 
-      <nav className="no-drag mt-4 flex-1 space-y-0.5 overflow-y-auto px-3 pb-3">
+      <nav className="flex-1 overflow-y-auto px-2 pb-2">
+        <p className={`${overline} px-2 pb-1.5 pt-1`}>Postfach</p>
         {sortBoxes(props.mailboxes).map((box) => {
-          const isActive = props.view === 'mail' && box.path === props.activeMailbox
+          const meta = boxMeta(box)
           return (
-            <button
+            <Row
               key={box.path}
+              icon={meta.icon}
+              label={meta.name}
+              count={box.unseen}
+              active={mailActive && box.path === props.activeMailbox}
               onClick={() => props.onSelectMailbox(box.path)}
-              className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition ${
-                isActive
-                  ? 'bg-brand-500/10 font-semibold text-brand-600 dark:text-brand-300'
-                  : 'text-slate-600 hover:bg-slate-200/60 dark:text-slate-300 dark:hover:bg-white/5'
-              }`}
-            >
-              <span className={isActive ? 'text-brand-500' : 'text-slate-400'}>
-                {mailboxIcon(box)}
-              </span>
-              <span className="truncate capitalize">{box.name}</span>
-              {box.unseen > 0 && (
-                <span className="ml-auto rounded-full bg-brand-500 px-1.5 py-0.5 text-[11px] font-semibold text-white">
-                  {box.unseen}
-                </span>
-              )}
-            </button>
+            />
           )
         })}
         {props.mailboxes.length === 0 && (
-          <p className="px-2.5 py-2 text-xs text-slate-400">Ordner werden geladen…</p>
+          <p className="px-2 py-1.5 text-xs text-ink-mute">Ordner werden geladen …</p>
         )}
 
-        <div className="my-2 border-t border-slate-200/70 dark:border-white/10" />
-        <button
+        <p className={`${overline} px-2 pb-1.5 pt-4`}>Ansichten</p>
+        <Row
+          icon="clock"
+          label="Wegwerf-Postfach"
+          active={props.view === 'temp'}
           onClick={props.onOpenTemp}
-          className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition ${
-            props.view === 'temp'
-              ? 'bg-brand-500/10 font-semibold text-brand-600 dark:text-brand-300'
-              : 'text-slate-600 hover:bg-slate-200/60 dark:text-slate-300 dark:hover:bg-white/5'
-          }`}
-        >
-          <span className={props.view === 'temp' ? 'text-brand-500' : 'text-slate-400'}>
-            <IconClock />
-          </span>
-          <span className="truncate">Wegwerf-Postfach</span>
-        </button>
+        />
       </nav>
 
-      <div className="no-drag border-t border-slate-200 p-3 dark:border-white/10">
-        <div className="space-y-1">
-          {props.accounts.map((acc) => {
-            const isActive = acc.id === props.activeAccountId
-            const state = props.statuses[acc.id] ?? 'connecting'
-            return (
-              <div
-                key={acc.id}
-                className={`group flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition ${
-                  isActive ? 'bg-slate-200/70 dark:bg-white/10' : 'hover:bg-slate-200/50 dark:hover:bg-white/5'
-                }`}
-              >
-                <button
-                  onClick={() => props.onSelectAccount(acc.id)}
-                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                >
-                  <span className="relative">
-                    <span
-                      className="grid h-6 w-6 place-items-center rounded-full text-[10px] font-bold text-white"
-                      style={{ background: acc.color }}
-                    >
-                      {acc.label.slice(0, 2).toUpperCase()}
-                    </span>
-                    <span
-                      className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white dark:border-[#0b0f1a] ${STATUS_COLOR[state]}`}
-                    />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium">{acc.label}</span>
-                    <span className="block truncate text-[11px] text-slate-400">{acc.email}</span>
-                  </span>
-                </button>
-                <button
-                  onClick={() => props.onEditAccount(acc)}
-                  className="rounded p-1 text-slate-400 opacity-0 transition hover:text-slate-700 group-hover:opacity-100 dark:hover:text-white"
-                  title="Konto bearbeiten"
-                >
-                  <IconSettings width={15} height={15} />
-                </button>
-              </div>
-            )
-          })}
-        </div>
-
-        <div className="mt-2 flex items-center gap-1">
-          <button
-            onClick={props.onAddAccount}
-            className="flex flex-1 items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-200/60 hover:text-slate-800 dark:hover:bg-white/5 dark:hover:text-white"
-          >
-            <IconPlus width={14} height={14} />
-            Konto hinzufügen
-          </button>
-          <button
-            onClick={props.onDemo}
-            className="rounded-lg px-2 py-1.5 text-xs text-slate-400 transition hover:bg-slate-200/60 hover:text-slate-700 dark:hover:bg-white/5"
-            title="Demo-Postfach"
-          >
-            Demo
-          </button>
-        </div>
-        {active?.name && (
-          <p className="mt-1 px-2 text-[11px] text-slate-400">Absender: {active.name}</p>
-        )}
-      </div>
+      <button
+        onClick={props.onOpenPalette}
+        className="m-2 flex items-center gap-2 rounded-lg border border-line bg-chrome px-2.5 py-2 text-left text-xs text-ink-soft transition hover:border-line-hover"
+      >
+        <Icon name="command" size={14} />
+        <span className="flex-1">Alles finden</span>
+        <span className="rounded-[3px] border border-line-control px-1.5 py-0.5 font-mono text-2xs text-ink-mute">
+          Strg K
+        </span>
+      </button>
     </aside>
   )
 }

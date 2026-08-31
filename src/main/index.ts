@@ -15,9 +15,9 @@ function createWindow(): void {
     minHeight: 600,
     show: false,
     autoHideMenuBar: true,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0b0f1a' : '#f5f7fb',
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#030408' : '#f4f5fb',
     icon: notificationIconPath() || undefined,
-    titleBarStyle: 'hiddenInset',
+    titleBarStyle: 'hidden',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,

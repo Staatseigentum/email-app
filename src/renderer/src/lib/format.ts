@@ -26,6 +26,18 @@ export function formatFullDate(iso: string): string {
   })
 }
 
+/** Kompakt fürs Maschinen-Setting im Leseansicht-Kopf: „Fr 17.05. · 09:41". */
+export function formatMetaDate(iso: string): string {
+  const d = new Date(iso)
+  const day = d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })
+  const time = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+  return `${day} · ${time}`
+}
+
+export function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+}
+
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
   if (parts.length === 0) return '?'

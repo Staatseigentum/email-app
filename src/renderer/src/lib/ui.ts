@@ -1,26 +1,34 @@
-/** Gemeinsame Tailwind-Klassenbausteine für ein einheitliches Erscheinungsbild. */
+/** Gemeinsame Tailwind-Klassenbausteine – neues Design-System (Violett, Tokens). */
 
 export const input =
-  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition ' +
-  'focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 ' +
-  'dark:border-white/10 dark:bg-white/5'
+  'w-full rounded-[3px] border border-line-control bg-well px-3 py-2 text-sm text-ink shadow-well outline-none ' +
+  'transition placeholder:text-ink-mute focus:border-accent/50 focus:ring-2 focus:ring-accent-soft'
 
-export const label = 'mb-1 block text-xs font-medium text-slate-500'
+export const label =
+  'mb-1 block text-2xs font-medium uppercase tracking-[0.09em] text-ink-mute'
 
 export const btnPrimary =
-  'inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 ' +
-  'px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-brand-600/25 transition ' +
-  'hover:brightness-110 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50'
+  'inline-flex items-center justify-center gap-2 rounded-[3px] bg-accent px-4 text-sm font-semibold text-accent-on ' +
+  'shadow-glow transition-[filter,transform] duration-[80ms] hover:bg-accent-hover active:translate-y-px ' +
+  'disabled:cursor-not-allowed disabled:opacity-45'
 
 export const btnGhost =
-  'inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium ' +
-  'transition hover:bg-slate-100 disabled:opacity-50 dark:border-white/10 dark:hover:bg-white/10'
+  'inline-flex items-center gap-1.5 rounded-[3px] border border-line-control px-3 py-1.5 text-xs font-medium text-ink-soft ' +
+  'transition hover:border-line-hover hover:text-ink disabled:opacity-45'
+
+export const btnOutline =
+  'inline-flex items-center gap-1.5 rounded-[3px] border border-line-control px-3 text-sm font-medium text-ink ' +
+  'transition hover:border-line-hover disabled:opacity-45'
 
 export const iconBtn =
-  'rounded-lg p-2 text-slate-500 transition hover:bg-slate-200/70 hover:text-slate-900 ' +
-  'dark:hover:bg-white/10 dark:hover:text-white'
+  'grid place-items-center rounded-[3px] text-ink-mute transition hover:bg-accent-soft hover:text-ink ' +
+  'disabled:opacity-45'
 
-export const modalOverlay = 'absolute inset-0 bg-slate-900/40 backdrop-blur-sm'
+export const modalOverlay = 'fixed inset-0 bg-[var(--scrim)] backdrop-blur-[3px]'
 
-export const card =
-  'rounded-2xl bg-white shadow-2xl shadow-slate-900/10 dark:bg-[#141a2b] dark:shadow-black/40'
+export const card = 'rounded-lg border border-line bg-panel'
+
+export const dialog =
+  'animate-dialog-in relative flex flex-col overflow-hidden rounded-xl border border-line-control bg-chrome shadow-dialog'
+
+export const overline = 'text-2xs font-medium uppercase tracking-[0.09em] text-ink-mute'
