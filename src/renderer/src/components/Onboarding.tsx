@@ -2,6 +2,7 @@ import { IconPlus, IconSend } from './Icons'
 
 export function Onboarding(props: {
   onAdd: () => void
+  onDemo: () => void
   theme: 'dark' | 'light'
   onToggleTheme: () => void
 }): JSX.Element {
@@ -28,6 +29,12 @@ export function Onboarding(props: {
       >
         <IconPlus width={16} height={16} />
         Erstes Konto hinzufügen
+      </button>
+      <button
+        onClick={props.onDemo}
+        className="no-drag mt-3 text-sm font-medium text-brand-500 transition hover:text-brand-400"
+      >
+        Ohne Konto: Demo-Postfach ausprobieren →
       </button>
       <p className="mt-4 text-xs text-slate-400">
         Passwörter werden lokal über den System-Schlüsselbund verschlüsselt gespeichert.

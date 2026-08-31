@@ -24,6 +24,13 @@ function createWindow(): void {
 
   win.on('ready-to-show', () => win.show())
 
+  if (isDev) {
+    win.webContents.openDevTools({ mode: 'bottom' })
+    win.webContents.on('console-message', (_e, level, message, line, source) => {
+      console.log(`[renderer:${level}] ${message} (${source}:${line})`)
+    })
+  }
+
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }

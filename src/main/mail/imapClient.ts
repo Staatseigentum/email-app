@@ -94,7 +94,10 @@ export class AccountConnection {
       secure: acc.imap.secure,
       auth: { user: acc.user, pass: accountStore.password(this.accountId) },
       logger: false,
-      emitLogs: false
+      emitLogs: false,
+      connectionTimeout: 15000,
+      greetingTimeout: 10000,
+      socketTimeout: 60000
     }
   }
 
@@ -296,13 +299,23 @@ export async function testConnection(opts: {
   user: string
   password: string
 }): Promise<void> {
+  if (!opts.imap.host) throw new Error('IMAP-Server fehlt')
   const client = new ImapFlow({
     host: opts.imap.host,
     port: opts.imap.port,
     secure: opts.imap.secure,
     auth: { user: opts.user, pass: opts.password },
-    logger: false
+    logger: false,
+    emitLogs: false,
+    connectionTimeout: 15000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000
   })
-  await client.connect()
-  await client.logout()
+  client.on('error', () => {})
+  try {
+    await client.connect()
+    await client.logout()
+  } catch (err) {
+    throw new Error(`IMAP (${opts.imap.host}:${opts.imap.port}): ${(err as Error).message}`)
+  }
 }

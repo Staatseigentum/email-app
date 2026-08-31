@@ -36,7 +36,8 @@ export function AccountModal(props: {
     setEmail(value)
     if (!user || user === email) setUser(value)
     const p = detectProvider(value)
-    if (p && !editing) {
+    if (editing) return
+    if (p) {
       setImapHost(p.imap.host)
       setImapPort(p.imap.port)
       setImapSecure(p.imap.secure)
@@ -44,6 +45,13 @@ export function AccountModal(props: {
       setSmtpPort(p.smtp.port)
       setSmtpSecure(p.smtp.secure)
       if (!label) setLabel(p.label)
+      setAdvanced(false)
+    } else if (value.includes('@')) {
+      // Kein bekannter Anbieter → Servereinstellungen einblenden und raten
+      const domain = value.split('@')[1] ?? ''
+      setImapHost((h) => h || `imap.${domain}`)
+      setSmtpHost((h) => h || `smtp.${domain}`)
+      setAdvanced(true)
     }
   }
 
@@ -134,6 +142,12 @@ export function AccountModal(props: {
               <p className="mt-1 text-xs text-emerald-600">
                 {detected.label} erkannt – Server automatisch ausgefüllt.
                 {detected.hint && <span className="block text-amber-600">{detected.hint}</span>}
+              </p>
+            )}
+            {!detected && !editing && email.includes('@') && (
+              <p className="mt-1 text-xs text-amber-600">
+                Unbekannter Anbieter – bitte IMAP-/SMTP-Server unten prüfen (geraten aus der
+                Domain).
               </p>
             )}
           </div>

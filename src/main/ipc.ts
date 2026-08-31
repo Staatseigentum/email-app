@@ -10,11 +10,13 @@ import { accountStore } from './store'
 import { mailManager } from './mail/manager'
 import { testConnection } from './mail/imapClient'
 import { sendMail, verifySmtp } from './mail/smtp'
+import { DemoConnection, isDemoAccount } from './mail/demo'
 
 async function wrap<T>(fn: () => Promise<T>): Promise<IpcResult<T>> {
   try {
     return { ok: true, data: await fn() }
   } catch (err) {
+    console.error('[ipc] Fehler:', err)
     return { ok: false, error: (err as Error).message || String(err) }
   }
 }
@@ -68,6 +70,7 @@ export function registerIpc(): void {
 
   ipcMain.handle(IPC.accountsTest, (_e, input: MailAccountInput) =>
     wrap(async () => {
+      if (isDemoAccount(input.imap.host)) return true
       await testConnection({ imap: input.imap, user: input.user, password: input.password })
       await verifySmtp({ smtp: input.smtp, user: input.user, password: input.password })
       return true
@@ -98,7 +101,16 @@ export function registerIpc(): void {
     wrap(() => mailManager.get(id).deleteMessage(mailbox, uid))
   )
 
-  ipcMain.handle(IPC.send, (_e, payload: ComposePayload) => wrap(() => sendMail(payload)))
+  ipcMain.handle(IPC.send, (_e, payload: ComposePayload) =>
+    wrap(async () => {
+      const acc = accountStore.get(payload.accountId)
+      if (acc && isDemoAccount(acc.imap.host)) {
+        const conn = mailManager.get(payload.accountId)
+        if (conn instanceof DemoConnection) return conn.send(payload)
+      }
+      return sendMail(payload)
+    })
+  )
 
   ipcMain.handle(IPC.sync, (_e, id: string) =>
     wrap(async () => {

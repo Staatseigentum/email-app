@@ -1,10 +1,13 @@
 import { EventEmitter } from 'events'
 import { accountStore } from '../store'
 import { AccountConnection } from './imapClient'
+import { DemoConnection, isDemoAccount } from './demo'
+
+export type MailConnection = AccountConnection | DemoConnection
 
 /** Hält alle aktiven Konto-Verbindungen und leitet Events an den Renderer weiter. */
 export class MailManager extends EventEmitter {
-  private connections = new Map<string, AccountConnection>()
+  private connections = new Map<string, MailConnection>()
 
   async startAll(): Promise<void> {
     for (const acc of accountStore.list()) {
@@ -14,7 +17,11 @@ export class MailManager extends EventEmitter {
 
   async startAccount(id: string): Promise<void> {
     if (this.connections.has(id)) return
-    const conn = new AccountConnection(id, this)
+    const acc = accountStore.get(id)
+    const conn: MailConnection =
+      acc && isDemoAccount(acc.imap.host)
+        ? new DemoConnection(id, this)
+        : new AccountConnection(id, this)
     this.connections.set(id, conn)
     try {
       await conn.start()
@@ -35,7 +42,7 @@ export class MailManager extends EventEmitter {
     await this.startAccount(id)
   }
 
-  get(id: string): AccountConnection {
+  get(id: string): MailConnection {
     const conn = this.connections.get(id)
     if (!conn) throw new Error(`Keine Verbindung für Konto ${id}`)
     return conn

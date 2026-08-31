@@ -49,6 +49,7 @@ export function Sidebar(props: {
   onSelectMailbox: (path: string) => void
   onCompose: () => void
   onAddAccount: () => void
+  onDemo: () => void
   onEditAccount: (a: MailAccount) => void
   theme: 'dark' | 'light'
   onToggleTheme: () => void
@@ -155,6 +156,13 @@ export function Sidebar(props: {
           >
             <IconPlus width={14} height={14} />
             Konto hinzufügen
+          </button>
+          <button
+            onClick={props.onDemo}
+            className="rounded-lg px-2 py-1.5 text-xs text-slate-400 transition hover:bg-slate-200/60 hover:text-slate-700 dark:hover:bg-white/5"
+            title="Demo-Postfach"
+          >
+            Demo
           </button>
           <button
             onClick={props.onToggleTheme}

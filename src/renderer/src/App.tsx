@@ -212,6 +212,28 @@ export default function App(): JSX.Element {
     [loadAccounts, showToast]
   )
 
+  const createDemoAccount = useCallback(async () => {
+    const existing = accounts.find((a) => a.imap.host === 'demo')
+    if (existing) {
+      setActiveAccountId(existing.id)
+      return
+    }
+    const res = await api.accounts.save({
+      label: 'Demo',
+      name: 'Demo-Nutzer',
+      email: 'du@demo.mailwave.app',
+      user: 'demo',
+      password: 'demo',
+      imap: { host: 'demo', port: 0, secure: false },
+      smtp: { host: 'demo', port: 0, secure: false }
+    })
+    if (res.ok) {
+      await loadAccounts()
+      setActiveAccountId(res.data.id)
+      showToast('Demo-Postfach erstellt')
+    } else showToast(`Fehler: ${res.error}`)
+  }, [accounts, loadAccounts, showToast])
+
   const deleteAccount = useCallback(
     async (id: string) => {
       await api.accounts.delete(id)
@@ -266,7 +288,12 @@ export default function App(): JSX.Element {
   if (accounts.length === 0) {
     return (
       <>
-        <Onboarding onAdd={() => setAccountModal({})} theme={theme} onToggleTheme={toggleTheme} />
+        <Onboarding
+          onAdd={() => setAccountModal({})}
+          onDemo={createDemoAccount}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+        />
         {accountModal && (
           <AccountModal
             account={accountModal.account}
@@ -294,6 +321,7 @@ export default function App(): JSX.Element {
         onSelectMailbox={openMailbox}
         onCompose={() => activeAccount && setCompose({ accountId: activeAccount.id })}
         onAddAccount={() => setAccountModal({})}
+        onDemo={createDemoAccount}
         onEditAccount={(a) => setAccountModal({ account: a })}
         theme={theme}
         onToggleTheme={toggleTheme}
