@@ -2,10 +2,88 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ------------------------------------------------------------------ Tokens */
+/* Hellmodus ist die Vorgabe auf :root, .dark überschreibt. */
 :root {
   color-scheme: light dark;
+
+  --window: #f4f5fb;
+  --canvas: #ffffff;
+  --panel: #f7f8fd;
+  --chrome: #ffffff;
+  --chrome-2: #eceefa;
+  --chrome-3: #e2e4f4;
+  --well: #f4f5fb;
+
+  --line: rgba(42, 25, 88, 0.1);
+  --line-control: rgba(42, 25, 88, 0.18);
+  --line-hover: rgba(42, 25, 88, 0.32);
+
+  --text-primary: #14183a;
+  --text-secondary: #4b5280;
+  --text-muted: #6f77a3;
+
+  --accent: #8250f2;
+  --accent-hover: #6b2fd6;
+  --accent-pressed: #6b2fd6;
+  --accent-soft: rgba(130, 80, 242, 0.12);
+  --accent-text: #6b2fd6;
+  --accent-text-strong: #6b2fd6;
+  --accent-on: #ffffff;
+
+  --ok: #189a68;
+  --warn: #b8801a;
+  --bad: #c62c45;
+  --info: #1594a1;
+
+  --glow: 0 0 0 rgba(0, 0, 0, 0);
+  --elev-window: 0 24px 64px rgba(20, 24, 58, 0.14);
+  --elev-popover: 0 18px 40px rgba(20, 24, 58, 0.16);
+  --elev-dialog: 0 24px 60px rgba(20, 24, 58, 0.22);
+  --scrim: rgba(20, 24, 58, 0.28);
+
+  --ease-standard: cubic-bezier(0.2, 0.6, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.dark {
+  --window: #030408;
+  --canvas: #060814;
+  --panel: #0a0d1d;
+  --chrome: #0f1327;
+  --chrome-2: #141932;
+  --chrome-3: #20274b;
+  --well: #04060f;
+
+  --line: rgba(154, 163, 205, 0.1);
+  --line-control: rgba(154, 163, 205, 0.18);
+  --line-hover: rgba(154, 163, 205, 0.32);
+
+  --text-primary: #e7e9f6;
+  --text-secondary: #9aa3cd;
+  --text-muted: #7b85b5;
+
+  --accent: #8250f2;
+  --accent-hover: #a480ff;
+  --accent-pressed: #6b2fd6;
+  --accent-soft: rgba(139, 91, 245, 0.16);
+  --accent-text: #c3a9ff;
+  --accent-text-strong: #e0d3ff;
+  --accent-on: #ffffff;
+
+  --ok: #3ed69a;
+  --warn: #f5b73f;
+  --bad: #ff5d73;
+  --info: #45d3e0;
+
+  --glow: 0 0 24px rgba(139, 91, 245, 0.35);
+  --elev-window: 0 24px 64px rgba(4, 5, 14, 0.7);
+  --elev-popover: 0 18px 40px rgba(4, 5, 14, 0.7);
+  --elev-dialog: 0 24px 60px rgba(4, 5, 14, 0.8);
+  --scrim: rgba(4, 6, 15, 0.76);
+}
+
+/* ------------------------------------------------------------------ Base */
 html,
 body,
 #root {
@@ -14,25 +92,17 @@ body,
 
 body {
   margin: 0;
-  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--window);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
 
 ::selection {
-  background: rgb(53 99 255 / 0.25);
-}
-
-/* App-Hintergrund als sehr sanfter Verlauf */
-.app-bg {
-  background:
-    radial-gradient(120% 60% at 100% 0%, rgb(53 99 255 / 0.06), transparent 60%),
-    #f4f6fb;
-}
-.dark .app-bg {
-  background:
-    radial-gradient(120% 60% at 100% 0%, rgb(53 99 255 / 0.12), transparent 55%),
-    #0b0f1a;
+  background: var(--accent-soft);
 }
 
 .drag {
@@ -42,29 +112,37 @@ body {
   -webkit-app-region: no-drag;
 }
 
-/* schlanke Scrollbars */
+.font-mono {
+  font-feature-settings: 'tnum' 1;
+}
+
+/* ------------------------------------------------------------------ Scrollbars */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgb(148 163 184 / 0.35);
+  background: var(--chrome-3);
   border-radius: 9999px;
-  border: 2px solid transparent;
+  border: 3px solid transparent;
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgb(148 163 184 / 0.55);
+  background: var(--line-hover);
   background-clip: content-box;
 }
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
 
+/* ------------------------------------------------------------------ Mail-HTML */
 .mail-html {
-  color: inherit;
-  line-height: 1.6;
+  color: var(--text-primary);
+  line-height: 1.65;
   word-break: break-word;
 }
 .mail-html a {
-  color: #3563ff;
+  color: var(--accent-text);
   text-decoration: underline;
 }
 .mail-html img {
@@ -72,8 +150,18 @@ body {
   height: auto;
 }
 .mail-html blockquote {
-  border-left: 3px solid rgb(148 163 184 / 0.5);
+  border-left: 2px solid var(--line-hover);
   margin: 0.5rem 0;
   padding-left: 0.75rem;
-  color: rgb(100 116 139);
+  color: var(--text-secondary);
+}
+
+/* ------------------------------------------------------------------ Motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
 }
