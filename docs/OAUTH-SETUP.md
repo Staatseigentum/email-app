@@ -13,16 +13,24 @@ Sie wird lokal verschlüsselt in `<userData>/data/oauth.json` gespeichert.
 ## Google / Gmail
 
 1. **console.cloud.google.com** öffnen → Projekt anlegen (z. B. „MailWave").
-2. **APIs & Dienste → OAuth-Zustimmungsbildschirm**:
+2. **APIs & Dienste → OAuth-Zustimmungsbildschirm** (neue Oberfläche: **Google Auth
+   Platform**):
    - Nutzertyp **Extern**, App-Name + eigene E-Mail eintragen.
-   - Unter **Testnutzer** deine eigene Gmail-Adresse hinzufügen.
-   - (Solange die App im Test-Modus ist, erscheint beim Login „Google hat diese App
-     nicht überprüft" → *Erweitert → Weiter zu …*. Für den Eigengebrauch ist das ok.)
 3. **APIs & Dienste → Anmeldedaten → Anmeldedaten erstellen → OAuth-Client-ID**:
    - Anwendungstyp: **Desktop-App**.
-   - Nach dem Erstellen **Client-ID** und **Client-Schlüssel** kopieren.
+   - Nach dem Erstellen **„JSON herunterladen"** – diese Datei in MailWave wählen
+     (oder Client-ID + Client-Schlüssel kopieren).
 4. Eine „Gmail API" muss **nicht** aktiviert werden – der Scope ist `https://mail.google.com/`.
-5. In MailWave: Gmail-Kachel → beide Werte einfügen → „Client-ID speichern" → „Mit Google anmelden".
+5. **Zugriff freischalten** – sonst „Fehler 403: access_denied" beim Login:
+   - **Empfohlen:** OAuth-Zustimmungsbildschirm / „Zielgruppe" → **„App veröffentlichen"
+     / „In Produktion"**. Dann keine Testnutzer-Liste nötig und die Anmeldung läuft
+     **nicht nach 7 Tagen ab**. Die Google-Verifizierung ist nur für die Weitergabe an
+     Dritte nötig – für den Eigengebrauch ignorieren.
+   - **Alternative:** im Test-Modus bleiben und unter **„Testnutzer"** die eigene
+     Gmail-Adresse hinzufügen. Nachteil: Tokens laufen alle 7 Tage ab.
+6. Beim ersten Login erscheint „Google hat diese App nicht überprüft" →
+   **Erweitert → Weiter zu … (unsicher)**. Das ist bei der eigenen App normal.
+7. In MailWave: Gmail-Kachel → credentials.json wählen → „Mit Google anmelden".
 
 Redirect-URI muss nicht eingetragen werden (Loopback `http://127.0.0.1:<Port>` ist bei
 Desktop-Apps automatisch erlaubt).

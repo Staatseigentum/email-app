@@ -5,9 +5,11 @@ const api = window.mailwave
 
 const GOOGLE_STEPS = [
   'Google Cloud Console öffnen und ein Projekt anlegen (z. B. „MailWave").',
-  'APIs & Dienste → OAuth-Zustimmungsbildschirm: Typ „Extern", App-Name + deine E-Mail, unter „Testnutzer" deine Gmail-Adresse hinzufügen.',
+  'APIs & Dienste → OAuth-Zustimmungsbildschirm: Typ „Extern", App-Name + deine E-Mail.',
+  'Wichtig: dort auf „App veröffentlichen" / „In Produktion" – sonst Fehler 403 und Tokens laufen nach 7 Tagen ab. (Alternativ im Test-Modus deine Gmail unter „Testnutzer" eintragen.)',
   'APIs & Dienste → Anmeldedaten → „Anmeldedaten erstellen" → OAuth-Client-ID → Typ „Desktop-App".',
-  'Beim erstellten Client „JSON herunterladen" – dann hier die Datei wählen.'
+  'Beim erstellten Client „JSON herunterladen" – dann hier die Datei wählen.',
+  'Beim ersten Login: „Erweitert" → „Weiter zu … (unsicher)" – bei der eigenen App normal.'
 ]
 
 const MS_STEPS = [

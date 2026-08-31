@@ -74,7 +74,13 @@ function startLoopback(expectedState: string): Promise<Loopback> {
         res.end(resultPage(ok ? 'Anmeldung erfolgreich' : 'Anmeldung fehlgeschlagen', ok))
         server.close()
         if (ok) resolveCode(code as string)
-        else rejectCode(new Error(error || 'Ungültige Antwort vom Anmeldedienst'))
+        else if ((error || '').includes('access_denied')) {
+          rejectCode(
+            new Error(
+              'Google/Microsoft hat den Zugriff blockiert (access_denied). Meist steht das OAuth-Projekt auf „Testing" und deine Adresse ist kein Testnutzer – oder die App muss „veröffentlicht/In Produktion" gesetzt werden. Siehe docs/OAUTH-SETUP.md.'
+            )
+          )
+        } else rejectCode(new Error(error || 'Ungültige Antwort vom Anmeldedienst'))
       } catch (e) {
         rejectCode(e as Error)
       }
