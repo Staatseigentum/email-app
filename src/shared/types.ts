@@ -1,3 +1,6 @@
+export type AuthType = 'password' | 'oauth'
+export type OAuthProvider = 'google' | 'microsoft'
+
 export interface MailAccount {
   id: string
   label: string
@@ -7,13 +10,32 @@ export interface MailAccount {
   imap: { host: string; port: number; secure: boolean }
   smtp: { host: string; port: number; secure: boolean }
   user: string
+  authType: AuthType
+  oauthProvider?: OAuthProvider
 }
 
-/** Wie ein Account beim Anlegen / Bearbeiten hereinkommt (inkl. Passwort). */
-export interface MailAccountInput extends Omit<MailAccount, 'id' | 'color'> {
+/** Wie ein Account beim Anlegen / Bearbeiten hereinkommt. */
+export interface MailAccountInput
+  extends Omit<MailAccount, 'id' | 'color' | 'authType' | 'oauthProvider'> {
   id?: string
   color?: string
-  password: string
+  authType?: AuthType
+  oauthProvider?: OAuthProvider
+  /** Nur bei authType 'password'. Leer / '__keep__' = unverändert lassen. */
+  password?: string
+  /** Nur bei authType 'oauth': aus dem OAuth-Flow. */
+  refreshToken?: string
+}
+
+export interface OAuthResult {
+  provider: OAuthProvider
+  email: string
+  refreshToken: string
+}
+
+export interface OAuthClientConfig {
+  google: { clientId: string; clientSecret: string; configured: boolean }
+  microsoft: { clientId: string; configured: boolean }
 }
 
 export interface MailboxNode {

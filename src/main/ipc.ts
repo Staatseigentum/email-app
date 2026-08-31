@@ -4,13 +4,16 @@ import type {
   ComposePayload,
   IpcResult,
   MailAccountInput,
-  NewMailEvent
+  NewMailEvent,
+  OAuthProvider
 } from '../shared/types'
 import { accountStore } from './store'
 import { mailManager } from './mail/manager'
 import { testConnection } from './mail/imapClient'
 import { sendMail, verifySmtp } from './mail/smtp'
 import { DemoConnection, isDemoAccount } from './mail/demo'
+import { runOAuth } from './oauth'
+import { oauthConfig } from './oauthConfig'
 
 async function wrap<T>(fn: () => Promise<T>): Promise<IpcResult<T>> {
   try {
@@ -70,11 +73,27 @@ export function registerIpc(): void {
 
   ipcMain.handle(IPC.accountsTest, (_e, input: MailAccountInput) =>
     wrap(async () => {
-      if (isDemoAccount(input.imap.host)) return true
-      await testConnection({ imap: input.imap, user: input.user, password: input.password })
-      await verifySmtp({ smtp: input.smtp, user: input.user, password: input.password })
+      if (isDemoAccount(input.imap.host) || input.authType === 'oauth') return true
+      await testConnection({
+        imap: input.imap,
+        user: input.user,
+        password: input.password ?? ''
+      })
+      await verifySmtp({ smtp: input.smtp, user: input.user, password: input.password ?? '' })
       return true
     })
+  )
+
+  ipcMain.handle(IPC.oauthConfigGet, () => wrap(async () => oauthConfig.public()))
+
+  ipcMain.handle(
+    IPC.oauthConfigSet,
+    (_e, input: Parameters<typeof oauthConfig.set>[0]) =>
+      wrap(async () => oauthConfig.set(input))
+  )
+
+  ipcMain.handle(IPC.oauthStart, (_e, provider: OAuthProvider) =>
+    wrap(() => runOAuth(provider))
   )
 
   ipcMain.handle(IPC.mailboxes, (_e, id: string) =>

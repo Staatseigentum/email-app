@@ -12,6 +12,9 @@ export const IPC = {
   send: 'mail:send',
   sync: 'mail:sync',
   openExternal: 'app:openExternal',
+  oauthStart: 'oauth:start',
+  oauthConfigGet: 'oauth:configGet',
+  oauthConfigSet: 'oauth:configSet',
   // main -> renderer events
   onStatus: 'evt:status',
   onNewMail: 'evt:newMail'

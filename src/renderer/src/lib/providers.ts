@@ -1,3 +1,5 @@
+import type { OAuthProvider } from '../../../shared/types'
+
 export interface ProviderPreset {
   id: string
   label: string
@@ -6,9 +8,14 @@ export interface ProviderPreset {
   match: RegExp
   imap: { host: string; port: number; secure: boolean }
   smtp: { host: string; port: number; secure: boolean }
+  /** Anbieter unterstützt Browser-Login (OAuth). */
+  oauth?: OAuthProvider
   /** true = Nutzer braucht ein App-Passwort statt des normalen Passworts. */
   appPassword?: boolean
   hint?: string
+  /** Seite zum Aktivieren von IMAP bzw. Erstellen eines App-Passworts. */
+  setupUrl?: string
+  setupSteps?: string[]
 }
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
@@ -19,8 +26,15 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     match: /@(gmail|googlemail)\.com$/i,
     imap: { host: 'imap.gmail.com', port: 993, secure: true },
     smtp: { host: 'smtp.gmail.com', port: 465, secure: true },
+    oauth: 'google',
     appPassword: true,
-    hint: 'Google verlangt ein App-Passwort: myaccount.google.com → Sicherheit → 2-Schritt-Verifizierung → App-Passwörter.'
+    setupUrl: 'https://myaccount.google.com/apppasswords',
+    setupSteps: [
+      'Google-Konto → Sicherheit → 2-Schritt-Verifizierung aktivieren',
+      'Danach „App-Passwörter" öffnen und ein neues für „Mail" erstellen',
+      'Den 16-stelligen Code hier als Passwort einfügen'
+    ],
+    hint: 'Empfohlen: Browser-Login. Alternativ App-Passwort (2FA erforderlich).'
   },
   {
     id: 'outlook',
@@ -29,7 +43,14 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     match: /@(outlook|hotmail|live|msn)\.[a-z.]+$/i,
     imap: { host: 'outlook.office365.com', port: 993, secure: true },
     smtp: { host: 'smtp.office365.com', port: 587, secure: false },
-    hint: 'Bei aktivierter 2FA ein App-Passwort in den Microsoft-Kontoeinstellungen erzeugen.'
+    oauth: 'microsoft',
+    setupUrl: 'https://account.microsoft.com/security',
+    setupSteps: [
+      'Bei aktivierter 2FA: Microsoft-Konto → Sicherheit → erweiterte Sicherheitsoptionen',
+      '„App-Passwörter" → neues App-Passwort erstellen',
+      'Passwort hier einfügen'
+    ],
+    hint: 'Empfohlen: Browser-Login. Basic-Auth wird von Microsoft teils abgeschaltet.'
   },
   {
     id: 'gmx',
@@ -38,7 +59,12 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     match: /@gmx\.[a-z.]+$/i,
     imap: { host: 'imap.gmx.net', port: 993, secure: true },
     smtp: { host: 'mail.gmx.net', port: 465, secure: true },
-    hint: 'Im GMX-Webmailer unter Einstellungen → POP3/IMAP den IMAP-Zugriff aktivieren.'
+    setupUrl: 'https://hilfe.gmx.net/pop-imap/einschalten.html',
+    setupSteps: [
+      'GMX-Postfach im Browser öffnen → Einstellungen → POP3/IMAP',
+      '„IMAP-Zugriff erlauben" aktivieren und speichern',
+      'Hier deine normale GMX-E-Mail-Adresse und dein Passwort eintragen'
+    ]
   },
   {
     id: 'webde',
@@ -47,7 +73,12 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     match: /@web\.de$/i,
     imap: { host: 'imap.web.de', port: 993, secure: true },
     smtp: { host: 'smtp.web.de', port: 587, secure: false },
-    hint: 'Im web.de-Webmailer unter Einstellungen → POP3/IMAP-Abruf aktivieren.'
+    setupUrl: 'https://hilfe.web.de/pop-imap/einschalten.html',
+    setupSteps: [
+      'web.de-Postfach im Browser öffnen → Einstellungen → POP3/IMAP-Abruf',
+      '„IMAP-Zugriff erlauben" aktivieren und speichern',
+      'Hier deine web.de-Adresse und dein Passwort eintragen'
+    ]
   },
   {
     id: 'icloud',
@@ -57,7 +88,12 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     imap: { host: 'imap.mail.me.com', port: 993, secure: true },
     smtp: { host: 'smtp.mail.me.com', port: 587, secure: false },
     appPassword: true,
-    hint: 'App-spezifisches Passwort auf account.apple.com → Anmeldung & Sicherheit erzeugen.'
+    setupUrl: 'https://account.apple.com',
+    setupSteps: [
+      'account.apple.com öffnen → Anmelden',
+      '„Anmeldung & Sicherheit" → „App-spezifische Passwörter" → neues erzeugen',
+      'Das erzeugte Passwort hier einfügen'
+    ]
   },
   {
     id: 'yahoo',
@@ -67,7 +103,12 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     imap: { host: 'imap.mail.yahoo.com', port: 993, secure: true },
     smtp: { host: 'smtp.mail.yahoo.com', port: 465, secure: true },
     appPassword: true,
-    hint: 'Yahoo verlangt ein App-Passwort (Konto-Sicherheit → App-Passwort generieren).'
+    setupUrl: 'https://login.yahoo.com/account/security/app-passwords',
+    setupSteps: [
+      'Yahoo → Konto-Info → Konto-Sicherheit',
+      '„App-Passwort generieren" → Name vergeben',
+      'Passwort hier einfügen'
+    ]
   },
   {
     id: 'tonline',
@@ -76,7 +117,11 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     match: /@(t-online|magenta)\.de$/i,
     imap: { host: 'secureimap.t-online.de', port: 993, secure: true },
     smtp: { host: 'securesmtp.t-online.de', port: 465, secure: true },
-    hint: 'Ggf. ein separates E-Mail-Passwort im Telekom-Kundencenter setzen.'
+    setupUrl: 'https://e-mail.t-online.de',
+    setupSteps: [
+      'Im Telekom-Kundencenter ggf. ein separates „E-Mail-Passwort" setzen',
+      'Hier deine @t-online.de-Adresse und dieses Passwort eintragen'
+    ]
   },
   {
     id: 'mailbox',
@@ -103,6 +148,23 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     smtp: { host: 'smtp.zoho.eu', port: 465, secure: true }
   }
 ]
+
+/** IMAP/SMTP-Server für ein OAuth-Konto. */
+export const OAUTH_SERVERS: Record<
+  OAuthProvider,
+  { imap: ProviderPreset['imap']; smtp: ProviderPreset['smtp']; label: string }
+> = {
+  google: {
+    label: 'Google',
+    imap: { host: 'imap.gmail.com', port: 993, secure: true },
+    smtp: { host: 'smtp.gmail.com', port: 465, secure: true }
+  },
+  microsoft: {
+    label: 'Microsoft',
+    imap: { host: 'outlook.office365.com', port: 993, secure: true },
+    smtp: { host: 'smtp.office365.com', port: 587, secure: false }
+  }
+}
 
 export function detectProvider(email: string): ProviderPreset | undefined {
   return PROVIDER_PRESETS.find((p) => p.match.test(email.trim()))

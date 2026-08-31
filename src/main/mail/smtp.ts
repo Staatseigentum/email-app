@@ -1,16 +1,26 @@
 import nodemailer from 'nodemailer'
 import { accountStore } from '../store'
+import { getAccessToken } from '../oauth'
 import type { ComposePayload } from '../../shared/types'
 
 export async function sendMail(payload: ComposePayload): Promise<{ messageId: string }> {
   const acc = accountStore.get(payload.accountId)
   if (!acc) throw new Error('Konto nicht gefunden')
 
+  const auth =
+    acc.authType === 'oauth'
+      ? {
+          type: 'OAuth2' as const,
+          user: acc.email,
+          accessToken: await getAccessToken(payload.accountId)
+        }
+      : { user: acc.user, pass: accountStore.password(payload.accountId) }
+
   const transporter = nodemailer.createTransport({
     host: acc.smtp.host,
     port: acc.smtp.port,
     secure: acc.smtp.secure,
-    auth: { user: acc.user, pass: accountStore.password(payload.accountId) }
+    auth
   })
 
   const info = await transporter.sendMail({

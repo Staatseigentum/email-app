@@ -9,7 +9,10 @@ import type {
   MailboxNode,
   MessageDetail,
   MessageSummary,
-  NewMailEvent
+  NewMailEvent,
+  OAuthClientConfig,
+  OAuthProvider,
+  OAuthResult
 } from '../shared/types'
 
 const api = {
@@ -41,6 +44,17 @@ const api = {
   },
   openExternal: (url: string): Promise<IpcResult<boolean>> =>
     ipcRenderer.invoke(IPC.openExternal, url),
+  oauth: {
+    start: (provider: OAuthProvider): Promise<IpcResult<OAuthResult>> =>
+      ipcRenderer.invoke(IPC.oauthStart, provider),
+    getConfig: (): Promise<IpcResult<OAuthClientConfig>> =>
+      ipcRenderer.invoke(IPC.oauthConfigGet),
+    setConfig: (input: {
+      googleClientId?: string
+      googleClientSecret?: string
+      microsoftClientId?: string
+    }): Promise<IpcResult<OAuthClientConfig>> => ipcRenderer.invoke(IPC.oauthConfigSet, input)
+  },
   onStatus: (cb: (s: ConnectionStatus) => void): (() => void) => {
     const handler = (_e: unknown, s: ConnectionStatus): void => cb(s)
     ipcRenderer.on(IPC.onStatus, handler)

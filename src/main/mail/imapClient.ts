@@ -2,6 +2,7 @@ import { ImapFlow, type ImapFlowOptions } from 'imapflow'
 import { simpleParser } from 'mailparser'
 import { EventEmitter } from 'events'
 import { accountStore } from '../store'
+import { getAccessToken } from '../oauth'
 import type {
   ConnectionStatus,
   MailboxNode,
@@ -85,14 +86,18 @@ export class AccountConnection {
     this.accountId = accountId
   }
 
-  private options(): ImapFlowOptions {
+  private async options(): Promise<ImapFlowOptions> {
     const acc = accountStore.get(this.accountId)
     if (!acc) throw new Error('Konto nicht gefunden')
+    const auth =
+      acc.authType === 'oauth'
+        ? { user: acc.email, accessToken: await getAccessToken(this.accountId) }
+        : { user: acc.user, pass: accountStore.password(this.accountId) }
     return {
       host: acc.imap.host,
       port: acc.imap.port,
       secure: acc.imap.secure,
-      auth: { user: acc.user, pass: accountStore.password(this.accountId) },
+      auth,
       logger: false,
       emitLogs: false,
       connectionTimeout: 15000,
@@ -114,7 +119,7 @@ export class AccountConnection {
   private async ensureWork(): Promise<ImapFlow> {
     if (this.workClient?.usable) return this.workClient
     this.emitStatus('connecting')
-    const client = new ImapFlow(this.options())
+    const client = new ImapFlow(await this.options())
     client.on('error', () => {})
     await client.connect()
     this.workClient = client
@@ -125,7 +130,7 @@ export class AccountConnection {
   private async startIdle(): Promise<void> {
     if (this.closed) return
     try {
-      const client = new ImapFlow(this.options())
+      const client = new ImapFlow(await this.options())
       client.on('error', () => {})
       client.on('close', () => this.scheduleReconnect())
       await client.connect()
