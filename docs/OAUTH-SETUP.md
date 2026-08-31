@@ -39,6 +39,16 @@ Desktop-Apps automatisch erlaubt).
 
 ## Microsoft / Outlook / Office 365
 
+> **„Anwendungen außerhalb eines Verzeichnisses zu erstellen, ist veraltet"** /
+> **AADSTS16000 … does not exist in tenant**: Dein privates Microsoft-Konto (Outlook.com,
+> Hotmail, Live) hat noch **kein Verzeichnis (Tenant)**. Einmalig anlegen:
+> **entra.microsoft.com → oben Einstellungen-Zahnrad → „Verzeichnisse + Abonnements"**
+> bzw. **Identität → Übersicht → Mandanten verwalten → + Erstellen → „Microsoft Entra ID"**.
+> Organisationsname + Anfangsdomäne + Land eintragen → *Überprüfen und erstellen*.
+> Danach oben rechts in **dieses neue Verzeichnis wechseln** und erst dann die
+> App-Registrierung anlegen. (Alternativ: kostenloses Azure-Konto unter
+> `azure.microsoft.com/free` – legt automatisch ein „Standardverzeichnis" an.)
+
 1. **entra.microsoft.com** (oder portal.azure.com) → **App-Registrierungen → Neue Registrierung**.
    - Name: „MailWave".
    - Unterstützte Kontotypen: **Konten in einem beliebigen Organisationsverzeichnis und
