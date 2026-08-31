@@ -340,30 +340,42 @@ export class AccountConnection {
       const start = Math.max(1, end - PAGE_SIZE + 1)
       const range = `${start}:${end}`
 
+      // Durchlauf 1: Kopfdaten + Struktur + Rohinhalt von Teil 1 (immer gültig).
       const rows: { summary: MessageSummary; seq: number; part?: SnippetPart }[] = []
       for await (const msg of client.fetch(
         range,
-        { envelope: true, flags: true, bodyStructure: true },
+        { envelope: true, flags: true, bodyStructure: true, bodyParts: ['1'] },
         {}
       )) {
-        rows.push({
-          summary: summaryFromFetch(msg),
-          seq: msg.seq,
-          part: pickSnippetPart(msg.bodyStructure)
-        })
+        const part = pickSnippetPart(msg.bodyStructure)
+        const summary = summaryFromFetch(msg)
+        if (part?.id === '1') {
+          const raw = msg.bodyParts?.get('1')
+          if (raw) summary.snippet = decodeSnippet(decodeBodyPart(raw, part))
+        }
+        rows.push({ summary, seq: msg.seq, part })
       }
 
-      // zweiter, schlanker Durchlauf: nur die für die Vorschau nötigen Teile laden und decodieren
-      const partIds = [
-        ...new Set(rows.map((r) => r.part?.id).filter((v): v is string => Boolean(v)))
-      ]
-      if (partIds.length) {
-        const bySeq = new Map(rows.map((r) => [r.seq, r]))
-        for await (const msg of client.fetch(range, { bodyParts: partIds }, {})) {
-          const row = bySeq.get(msg.seq)
-          if (!row?.part) continue
-          const raw = msg.bodyParts?.get(row.part.id)
-          if (raw) row.summary.snippet = decodeSnippet(decodeBodyPart(raw, row.part))
+      // Durchlauf 2: nur für Nachrichten, deren Textteil nicht Teil 1 ist
+      // (z. B. verschachtelte multipart-Mails) – je Teil-Pfad gebündelt.
+      const bySeq = new Map(rows.map((r) => [r.seq, r]))
+      const seqsByPart = new Map<string, number[]>()
+      for (const r of rows) {
+        if (!r.part || r.part.id === '1') continue
+        const list = seqsByPart.get(r.part.id) ?? []
+        list.push(r.seq)
+        seqsByPart.set(r.part.id, list)
+      }
+      for (const [partId, seqs] of seqsByPart) {
+        try {
+          for await (const msg of client.fetch(seqs.join(','), { bodyParts: [partId] }, {})) {
+            const row = bySeq.get(msg.seq)
+            if (!row?.part) continue
+            const raw = msg.bodyParts?.get(partId)
+            if (raw) row.summary.snippet = decodeSnippet(decodeBodyPart(raw, row.part))
+          }
+        } catch {
+          /* Vorschautexte sind optional – Liste trotzdem ausliefern */
         }
       }
 
