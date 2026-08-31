@@ -1,6 +1,6 @@
 {
   "name": "mailwave",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "MailWave – ein moderner Desktop-E-Mail-Client",
   "main": "./out/main/index.js",
   "author": "Marco Ebner",

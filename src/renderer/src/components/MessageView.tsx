@@ -16,7 +16,7 @@ function buildSrcDoc(html: string, dark: boolean): string {
 <style>
   :root { color-scheme: ${dark ? 'dark' : 'light'}; }
   html, body { height: auto; }
-  body { margin: 0; padding: 24px 28px; font-family: 'DM Sans','Segoe UI',system-ui,sans-serif; font-size: 15px; line-height: 1.65; color: ${fg}; background: ${bg}; word-break: break-word; overflow-wrap: anywhere; text-wrap: pretty; overflow-x: hidden; }
+  body { margin: 0; padding: 20px 22px; font-family: 'DM Sans','Segoe UI',system-ui,sans-serif; font-size: 15px; line-height: 1.65; color: ${fg}; background: ${bg}; word-break: break-word; overflow-wrap: anywhere; text-wrap: pretty; }
   img, video { max-width: 100% !important; height: auto; }
   a { color: ${link}; }
   blockquote { border-left: 2px solid ${border}; margin: .5rem 0; padding-left: .75rem; color: ${quote}; }
@@ -43,10 +43,12 @@ export function MessageView(props: {
   const frameRef = useRef<HTMLIFrameElement>(null)
   const observerRef = useRef<ResizeObserver | null>(null)
   const [frameHeight, setFrameHeight] = useState(320)
+  const [frameWidth, setFrameWidth] = useState<number | null>(null)
 
-  // Höhe bei Nachrichtenwechsel zurücksetzen
+  // Maße bei Nachrichtenwechsel zurücksetzen
   useEffect(() => {
     setFrameHeight(320)
+    setFrameWidth(null)
   }, [detail?.uid])
 
   useEffect(() => () => observerRef.current?.disconnect(), [])
@@ -55,7 +57,14 @@ export function MessageView(props: {
     const doc = frameRef.current?.contentDocument
     if (!doc?.body) return
     const h = Math.max(doc.body.scrollHeight, doc.documentElement?.scrollHeight ?? 0)
-    if (h > 0) setFrameHeight(h + 4)
+    if (h > 0) setFrameHeight((prev) => (Math.abs(prev - (h + 4)) > 1 ? h + 4 : prev))
+    // Breite starrer Layouts (z. B. 600-px-Newsletter) übernehmen, damit nichts
+    // abgeschnitten wird – der Container scrollt dann horizontal.
+    const w = Math.max(doc.body.scrollWidth, doc.documentElement?.scrollWidth ?? 0)
+    setFrameWidth((prev) => {
+      if (w <= 0) return prev
+      return prev !== null && Math.abs(prev - w) <= 1 ? prev : w
+    })
   }
 
   function handleFrameLoad(): void {
@@ -163,7 +172,7 @@ export function MessageView(props: {
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[640px] px-7 py-6">
+        <div className="mx-auto max-w-[640px] px-7 pt-6">
           <h1 className="font-display text-xl font-semibold tracking-[-0.012em] text-ink">
             {detail.subject || '(kein Betreff)'}
           </h1>
@@ -225,29 +234,34 @@ export function MessageView(props: {
             </div>
           )}
 
-          <div className="mt-5">
-            {srcDoc ? (
-              <iframe
-                ref={frameRef}
-                title="E-Mail-Inhalt"
-                sandbox="allow-same-origin"
-                srcDoc={srcDoc}
-                onLoad={handleFrameLoad}
-                scrolling="no"
-                style={{ height: frameHeight }}
-                className="w-full rounded-lg border border-line"
-              />
-            ) : (
-              <pre className="mail-html whitespace-pre-wrap font-sans text-base text-ink">
-                {detail.text || '(kein Inhalt)'}
-              </pre>
-            )}
-          </div>
+        </div>
 
-          {!props.readOnly && (
+        {srcDoc ? (
+          <div className="mt-5 overflow-x-auto px-4 pb-6">
+            <iframe
+              ref={frameRef}
+              title="E-Mail-Inhalt"
+              sandbox="allow-same-origin"
+              srcDoc={srcDoc}
+              onLoad={handleFrameLoad}
+              scrolling="no"
+              style={{ height: frameHeight, width: frameWidth ?? '100%', minWidth: '100%' }}
+              className="block rounded-lg border border-line"
+            />
+          </div>
+        ) : (
+          <div className="mx-auto max-w-[640px] px-7 pb-6">
+            <pre className="mail-html mt-5 whitespace-pre-wrap font-sans text-base text-ink">
+              {detail.text || '(kein Inhalt)'}
+            </pre>
+          </div>
+        )}
+
+        {!props.readOnly && (
+          <div className="mx-auto max-w-[640px] px-7 pb-6">
             <button
               onClick={props.onReply}
-              className="mt-6 flex w-full items-center gap-2 rounded-lg border border-line bg-panel px-3 py-2.5 text-left text-sm text-ink-mute transition hover:border-line-hover"
+              className="flex w-full items-center gap-2 rounded-lg border border-line bg-panel px-3 py-2.5 text-left text-sm text-ink-mute transition hover:border-line-hover"
             >
               <Icon name="corner-up-left" size={15} />
               <span className="flex-1">Kurz antworten …</span>
@@ -255,8 +269,8 @@ export function MessageView(props: {
                 R
               </span>
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   )
