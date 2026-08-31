@@ -53,7 +53,9 @@ const api = {
       googleClientId?: string
       googleClientSecret?: string
       microsoftClientId?: string
-    }): Promise<IpcResult<OAuthClientConfig>> => ipcRenderer.invoke(IPC.oauthConfigSet, input)
+    }): Promise<IpcResult<OAuthClientConfig>> => ipcRenderer.invoke(IPC.oauthConfigSet, input),
+    importGoogle: (): Promise<IpcResult<OAuthClientConfig>> =>
+      ipcRenderer.invoke(IPC.oauthImportGoogle)
   },
   onStatus: (cb: (s: ConnectionStatus) => void): (() => void) => {
     const handler = (_e: unknown, s: ConnectionStatus): void => cb(s)

@@ -37,6 +37,25 @@ function dec(v: string | undefined): string {
   return safeStorage.decryptString(Buffer.from(v, 'base64'))
 }
 
+/** Extrahiert client_id/secret aus einer von Google heruntergeladenen credentials.json
+ *  oder aus rohem JSON, das der Nutzer einfügt. */
+export function parseGoogleCredentials(raw: string): { clientId: string; clientSecret: string } {
+  let json: unknown
+  try {
+    json = JSON.parse(raw)
+  } catch {
+    throw new Error('Die Datei ist kein gültiges JSON.')
+  }
+  const obj = json as Record<string, unknown>
+  const node = (obj.installed ?? obj.web ?? obj) as Record<string, unknown>
+  const clientId = String(node.client_id ?? '')
+  const clientSecret = String(node.client_secret ?? '')
+  if (!clientId || !clientSecret) {
+    throw new Error('client_id oder client_secret fehlt. Bitte eine OAuth-Client-ID vom Typ „Desktop" verwenden.')
+  }
+  return { clientId, clientSecret }
+}
+
 export const oauthConfig = {
   /** Interne Credentials (mit Secret im Klartext) für den OAuth-Flow. */
   secrets(): { google: { clientId: string; clientSecret: string }; microsoft: { clientId: string } } {

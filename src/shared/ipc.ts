@@ -15,6 +15,7 @@ export const IPC = {
   oauthStart: 'oauth:start',
   oauthConfigGet: 'oauth:configGet',
   oauthConfigSet: 'oauth:configSet',
+  oauthImportGoogle: 'oauth:importGoogle',
   // main -> renderer events
   onStatus: 'evt:status',
   onNewMail: 'evt:newMail'

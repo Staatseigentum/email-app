@@ -1,4 +1,5 @@
-import { BrowserWindow, ipcMain, Notification, shell } from 'electron'
+import { BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron'
+import { readFileSync } from 'fs'
 import { IPC } from '../shared/ipc'
 import type {
   ComposePayload,
@@ -13,7 +14,7 @@ import { testConnection } from './mail/imapClient'
 import { sendMail, verifySmtp } from './mail/smtp'
 import { DemoConnection, isDemoAccount } from './mail/demo'
 import { runOAuth } from './oauth'
-import { oauthConfig } from './oauthConfig'
+import { oauthConfig, parseGoogleCredentials } from './oauthConfig'
 
 async function wrap<T>(fn: () => Promise<T>): Promise<IpcResult<T>> {
   try {
@@ -94,6 +95,23 @@ export function registerIpc(): void {
 
   ipcMain.handle(IPC.oauthStart, (_e, provider: OAuthProvider) =>
     wrap(() => runOAuth(provider))
+  )
+
+  ipcMain.handle(IPC.oauthImportGoogle, (e) =>
+    wrap(async () => {
+      const win = BrowserWindow.fromWebContents(e.sender) ?? undefined
+      const picked = await dialog.showOpenDialog(win as BrowserWindow, {
+        title: 'Google credentials.json wählen',
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+        properties: ['openFile']
+      })
+      if (picked.canceled || !picked.filePaths[0]) return oauthConfig.public()
+      const creds = parseGoogleCredentials(readFileSync(picked.filePaths[0], 'utf-8'))
+      return oauthConfig.set({
+        googleClientId: creds.clientId,
+        googleClientSecret: creds.clientSecret
+      })
+    })
   )
 
   ipcMain.handle(IPC.mailboxes, (_e, id: string) =>

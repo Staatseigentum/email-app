@@ -11,7 +11,9 @@ import {
   PROVIDER_PRESETS,
   providerById
 } from '../lib/providers'
+import { friendlyMailError } from '../lib/errors'
 import { IconX } from './Icons'
+import { OAuthSetup } from './OAuthSetup'
 
 const KEEP = '__keep__'
 const api = window.mailwave
@@ -46,25 +48,18 @@ export function AccountModal(props: {
   const [smtpPort, setSmtpPort] = useState(a?.smtp.port ?? 465)
   const [smtpSecure, setSmtpSecure] = useState(a?.smtp.secure ?? true)
   const [advanced, setAdvanced] = useState(editing && a?.authType !== 'oauth')
-  const [busy, setBusy] = useState<false | 'test' | 'save' | 'oauth' | 'cfg'>(false)
+  const [busy, setBusy] = useState<false | 'test' | 'save' | 'oauth'>(false)
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null)
+  const [canForce, setCanForce] = useState(false)
 
   const [oauthCfg, setOauthCfg] = useState<OAuthClientConfig | null>(null)
-  const [gId, setGId] = useState('')
-  const [gSecret, setGSecret] = useState('')
-  const [msId, setMsId] = useState('')
 
   const preset = useMemo(() => providerById(providerId), [providerId])
   const isOther = providerId === 'other'
 
   useEffect(() => {
     api.oauth.getConfig().then((r) => {
-      if (r.ok) {
-        setOauthCfg(r.data)
-        setGId(r.data.google.clientId)
-        setGSecret(r.data.google.clientSecret)
-        setMsId(r.data.microsoft.clientId)
-      }
+      if (r.ok) setOauthCfg(r.data)
     })
   }, [])
 
@@ -127,21 +122,6 @@ export function AccountModal(props: {
   const valid =
     email.includes('@') && imapHost && smtpHost && (editing || password.length > 0)
 
-  async function saveConfig(): Promise<void> {
-    setBusy('cfg')
-    setFeedback(null)
-    const r = await api.oauth.setConfig({
-      googleClientId: gId,
-      googleClientSecret: gSecret,
-      microsoftClientId: msId
-    })
-    setBusy(false)
-    if (r.ok) {
-      setOauthCfg(r.data)
-      setFeedback({ ok: true, msg: 'OAuth-Client gespeichert.' })
-    } else setFeedback({ ok: false, msg: r.error })
-  }
-
   async function startOAuth(): Promise<void> {
     if (!preset?.oauth) return
     setBusy('oauth')
@@ -172,26 +152,38 @@ export function AccountModal(props: {
     }
   }
 
+  function fail(msg: string): void {
+    setFeedback({ ok: false, msg: friendlyMailError(msg, { appPassword: preset?.appPassword }) })
+  }
+
   async function test(): Promise<void> {
     setBusy('test')
     setFeedback(null)
+    setCanForce(false)
     const res = await props.onTest(buildInput())
     setBusy(false)
-    setFeedback(
-      res.ok
-        ? { ok: true, msg: 'Verbindung erfolgreich – IMAP & SMTP erreichbar.' }
-        : { ok: false, msg: res.error }
-    )
+    if (res.ok) setFeedback({ ok: true, msg: 'Verbindung erfolgreich – IMAP & SMTP erreichbar.' })
+    else fail(res.error)
   }
 
-  async function save(): Promise<void> {
+  async function save(force = false): Promise<void> {
     setBusy('save')
     setFeedback(null)
+    // Vor dem Speichern testen, damit kein kaputtes Konto angelegt wird.
+    if (!force && !isOther) {
+      const res = await props.onTest(buildInput())
+      if (!res.ok) {
+        setBusy(false)
+        fail(res.error)
+        setCanForce(true)
+        return
+      }
+    }
     try {
       await props.onSave(buildInput())
     } catch (e) {
       setBusy(false)
-      setFeedback({ ok: false, msg: (e as Error).message })
+      fail((e as Error).message)
     }
   }
 
@@ -201,10 +193,6 @@ export function AccountModal(props: {
   const linkBtn = 'text-xs font-medium text-brand-600 hover:underline'
 
   const showPasswordForm = mode === 'password'
-  const consoleUrl =
-    preset?.oauth === 'google'
-      ? 'https://console.cloud.google.com/apis/credentials'
-      : 'https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -304,52 +292,14 @@ export function AccountModal(props: {
                         : `Mit ${preset.label} anmelden`}
                     </button>
                   </>
-                ) : (
-                  <div className="space-y-2 rounded-xl border border-amber-300/50 bg-amber-50 p-3 dark:bg-amber-500/10">
-                    <p className="text-xs font-medium text-amber-700">
-                      Browser-Login einmalig einrichten
-                    </p>
-                    <p className="text-xs text-amber-700/90">
-                      Lege eine OAuth-Client-ID an (
-                      <button onClick={() => api.openExternal(consoleUrl)} className="underline">
-                        {preset.oauth === 'google' ? 'Google Cloud Console' : 'Microsoft Entra'}
-                      </button>
-                      , Typ „Desktop"/„Mobile &amp; Desktop", Redirect{' '}
-                      <code>http://127.0.0.1</code>) und trage sie hier ein.
-                    </p>
-                    {preset.oauth === 'google' ? (
-                      <>
-                        <input
-                          value={gId}
-                          onChange={(e) => setGId(e.target.value)}
-                          className={input}
-                          placeholder="Google Client-ID (…apps.googleusercontent.com)"
-                        />
-                        <input
-                          value={gSecret}
-                          onChange={(e) => setGSecret(e.target.value)}
-                          className={input}
-                          placeholder="Google Client-Secret"
-                          type="password"
-                        />
-                      </>
-                    ) : (
-                      <input
-                        value={msId}
-                        onChange={(e) => setMsId(e.target.value)}
-                        className={input}
-                        placeholder="Microsoft Application (client) ID"
-                      />
-                    )}
-                    <button
-                      onClick={saveConfig}
-                      disabled={busy !== false}
-                      className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-700 disabled:opacity-50"
-                    >
-                      {busy === 'cfg' ? 'Speichern…' : 'Client-ID speichern'}
-                    </button>
-                  </div>
-                )}
+                ) : oauthCfg ? (
+                  <OAuthSetup
+                    provider={preset.oauth}
+                    config={oauthCfg}
+                    onChange={setOauthCfg}
+                    onCancel={() => setMode('password')}
+                  />
+                ) : null}
                 <button onClick={() => setMode('password')} className={linkBtn}>
                   stattdessen mit {preset.appPassword ? 'App-Passwort' : 'Passwort'} einrichten
                 </button>
@@ -488,11 +438,11 @@ export function AccountModal(props: {
 
                 <div className="flex items-center gap-3 pt-1">
                   <button
-                    onClick={save}
+                    onClick={() => save(false)}
                     disabled={!valid || busy !== false}
                     className="rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-brand-600/25 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {busy === 'save' ? 'Speichern…' : 'Speichern'}
+                    {busy === 'save' ? 'Prüfe & speichere…' : 'Speichern'}
                   </button>
                   <button
                     onClick={test}
@@ -501,6 +451,15 @@ export function AccountModal(props: {
                   >
                     {busy === 'test' ? 'Teste…' : 'Verbindung testen'}
                   </button>
+                  {canForce && (
+                    <button
+                      onClick={() => save(true)}
+                      disabled={busy !== false}
+                      className="text-xs text-slate-500 hover:underline"
+                    >
+                      trotzdem speichern
+                    </button>
+                  )}
                 </div>
               </div>
             )}
