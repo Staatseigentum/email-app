@@ -46,7 +46,9 @@ const body = {
   name: `MailWave ${version}`,
   body: notes,
   draft,
-  prerelease: version.startsWith('0.')
+  // Keine Vorabversion: der In-App-Updater listet zwar alle Releases, aber GitHub
+  // soll das neueste als „Latest" markieren und releases/latest soll funktionieren.
+  prerelease: false
 }
 
 const release = await api('POST', `/repos/${repo}/releases`, body).catch(async (err) => {

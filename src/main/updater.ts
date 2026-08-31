@@ -97,7 +97,13 @@ export async function checkForUpdates(opts: { silent?: boolean } = {}): Promise<
   if (checking) return cached
   checking = true
   try {
-    const rel = await getJson(`https://api.github.com/repos/${repo()}/releases/latest`)
+    // Nicht /releases/latest – das blendet Vorabversionen (0.0.x) aus.
+    const list = await getJson(`https://api.github.com/repos/${repo()}/releases?per_page=15`)
+    const rel = (Array.isArray(list) ? list : [])
+      .filter((r: any) => r && !r.draft)
+      .sort((a: any, b: any) =>
+        isNewer(a.tag_name || '', b.tag_name || '') ? -1 : 1
+      )[0]
     const tag: string = rel?.tag_name || ''
     const asset = (rel?.assets || []).find((a: any) => SETUP_ASSET.test(a?.name || ''))
     if (!tag || !asset || !isNewer(tag, app.getVersion())) {
