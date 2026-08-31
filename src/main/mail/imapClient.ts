@@ -18,6 +18,113 @@ function decodeSnippet(text: string | undefined): string {
   return text.replace(/\s+/g, ' ').trim().slice(0, 200)
 }
 
+interface StructNode {
+  part?: string
+  type?: string
+  encoding?: string
+  parameters?: { charset?: string }
+  disposition?: string
+  childNodes?: StructNode[]
+}
+
+interface SnippetPart {
+  id: string
+  encoding?: string
+  charset?: string
+  isHtml: boolean
+}
+
+function collectLeaves(node: StructNode | undefined, out: StructNode[]): void {
+  if (!node) return
+  if (node.childNodes?.length) {
+    for (const child of node.childNodes) collectLeaves(child, out)
+  } else {
+    out.push(node)
+  }
+}
+
+/** Sucht in der bodyStructure den Teil, der sich als Vorschautext eignet (bevorzugt text/plain). */
+function pickSnippetPart(structure: unknown): SnippetPart | undefined {
+  const leaves: StructNode[] = []
+  collectLeaves(structure as StructNode, leaves)
+  const text = leaves.filter(
+    (l) =>
+      l.disposition !== 'attachment' &&
+      (l.type === 'text/plain' || l.type === 'text/html')
+  )
+  const chosen = text.find((l) => l.type === 'text/plain') ?? text[0]
+  if (!chosen) return undefined
+  return {
+    id: chosen.part || '1',
+    encoding: chosen.encoding,
+    charset: chosen.parameters?.charset,
+    isHtml: chosen.type === 'text/html'
+  }
+}
+
+function decodeQuotedPrintable(input: string): Buffer {
+  const clean = input.replace(/=\r?\n/g, '')
+  const bytes: number[] = []
+  for (let i = 0; i < clean.length; i++) {
+    const ch = clean[i]
+    if (ch === '=' && /^[0-9A-Fa-f]{2}$/.test(clean.substr(i + 1, 2))) {
+      bytes.push(parseInt(clean.substr(i + 1, 2), 16))
+      i += 2
+    } else {
+      bytes.push(ch.charCodeAt(0) & 0xff)
+    }
+  }
+  return Buffer.from(bytes)
+}
+
+function htmlToText(html: string): string {
+  return html
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<(style|script|head|title)[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<\/(p|div|tr|li|h[1-6]|blockquote)>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&#(\d+);/g, (_, d) => {
+      try {
+        return String.fromCodePoint(Number(d))
+      } catch {
+        return ' '
+      }
+    })
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => {
+      try {
+        return String.fromCodePoint(parseInt(h, 16))
+      } catch {
+        return ' '
+      }
+    })
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** Wandelt den rohen (transfer-codierten) Teilinhalt in lesbaren Text um. */
+function decodeBodyPart(raw: Buffer, part: SnippetPart): string {
+  const enc = (part.encoding || '').toLowerCase()
+  let buf: Buffer
+  if (enc === 'base64') buf = Buffer.from(raw.toString('latin1'), 'base64')
+  else if (enc === 'quoted-printable') buf = decodeQuotedPrintable(raw.toString('latin1'))
+  else buf = raw
+
+  let text: string
+  try {
+    text = new TextDecoder(part.charset || 'utf-8').decode(buf)
+  } catch {
+    text = buf.toString('utf-8')
+  }
+  return part.isHtml ? htmlToText(text) : text
+}
+
 function addrList(value: unknown): string[] {
   const v = value as { value?: { name?: string; address?: string }[] } | undefined
   if (!v?.value) return []
@@ -161,20 +268,38 @@ export class AccountConnection {
     if (!client?.usable) return
     const since = this.lastUid + 1
     const range = `${since}:*`
+    const pending: { summary: MessageSummary; uid: number; part?: SnippetPart }[] = []
     for await (const msg of client.fetch(
       range,
-      { uid: true, envelope: true, flags: true, bodyStructure: true, bodyParts: ['1'] },
+      { uid: true, envelope: true, flags: true, bodyStructure: true },
       { uid: true }
     )) {
       if (msg.uid <= this.lastUid) continue
       this.lastUid = msg.uid
-      const summary = summaryFromFetch(msg)
-      const part = msg.bodyParts?.get('1')
-      if (part) summary.snippet = decodeSnippet(part.toString('utf-8'))
+      pending.push({
+        summary: summaryFromFetch(msg),
+        uid: msg.uid,
+        part: pickSnippetPart(msg.bodyStructure)
+      })
+    }
+    for (const row of pending) {
+      if (row.part) {
+        try {
+          const one = await client.fetchOne(
+            String(row.uid),
+            { bodyParts: [row.part.id] },
+            { uid: true }
+          )
+          const raw = one ? one.bodyParts?.get(row.part.id) : undefined
+          if (raw) row.summary.snippet = decodeSnippet(decodeBodyPart(raw, row.part))
+        } catch {
+          /* Vorschautext ist optional */
+        }
+      }
       this.bus.emit('newMail', {
         accountId: this.accountId,
         mailbox: 'INBOX',
-        message: summary
+        message: row.summary
       } as NewMailEvent)
     }
   }
@@ -213,18 +338,36 @@ export class AccountConnection {
       if (!total) return []
       const end = Math.max(1, total - page * PAGE_SIZE)
       const start = Math.max(1, end - PAGE_SIZE + 1)
-      const out: MessageSummary[] = []
+      const range = `${start}:${end}`
+
+      const rows: { summary: MessageSummary; seq: number; part?: SnippetPart }[] = []
       for await (const msg of client.fetch(
-        `${start}:${end}`,
-        { envelope: true, flags: true, bodyStructure: true, bodyParts: ['1'] },
+        range,
+        { envelope: true, flags: true, bodyStructure: true },
         {}
       )) {
-        const summary = summaryFromFetch(msg)
-        const part = msg.bodyParts?.get('1')
-        if (part) summary.snippet = decodeSnippet(part.toString('utf-8'))
-        out.push(summary)
+        rows.push({
+          summary: summaryFromFetch(msg),
+          seq: msg.seq,
+          part: pickSnippetPart(msg.bodyStructure)
+        })
       }
-      return out.reverse()
+
+      // zweiter, schlanker Durchlauf: nur die für die Vorschau nötigen Teile laden und decodieren
+      const partIds = [
+        ...new Set(rows.map((r) => r.part?.id).filter((v): v is string => Boolean(v)))
+      ]
+      if (partIds.length) {
+        const bySeq = new Map(rows.map((r) => [r.seq, r]))
+        for await (const msg of client.fetch(range, { bodyParts: partIds }, {})) {
+          const row = bySeq.get(msg.seq)
+          if (!row?.part) continue
+          const raw = msg.bodyParts?.get(row.part.id)
+          if (raw) row.summary.snippet = decodeSnippet(decodeBodyPart(raw, row.part))
+        }
+      }
+
+      return rows.map((r) => r.summary).reverse()
     } finally {
       lock.release()
     }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MessageDetail } from '../../../shared/types'
 import { Avatar } from './Avatar'
 import { formatBytes, formatMetaDate } from '../lib/format'
@@ -12,13 +12,15 @@ function buildSrcDoc(html: string, dark: boolean): string {
   const border = dark ? 'rgba(154,163,205,.32)' : 'rgba(42,25,88,.24)'
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: https: http:; style-src 'unsafe-inline'; font-src data:;">
+<base target="_blank">
 <style>
   :root { color-scheme: ${dark ? 'dark' : 'light'}; }
-  body { margin: 0; padding: 24px 28px; font-family: 'DM Sans','Segoe UI',system-ui,sans-serif; font-size: 15px; line-height: 1.65; color: ${fg}; background: ${bg}; word-break: break-word; text-wrap: pretty; }
-  img { max-width: 100%; height: auto; }
+  html, body { height: auto; }
+  body { margin: 0; padding: 24px 28px; font-family: 'DM Sans','Segoe UI',system-ui,sans-serif; font-size: 15px; line-height: 1.65; color: ${fg}; background: ${bg}; word-break: break-word; overflow-wrap: anywhere; text-wrap: pretty; overflow-x: hidden; }
+  img, video { max-width: 100% !important; height: auto; }
   a { color: ${link}; }
   blockquote { border-left: 2px solid ${border}; margin: .5rem 0; padding-left: .75rem; color: ${quote}; }
-  table { max-width: 100%; }
+  table { max-width: 100% !important; }
 </style></head><body>${html}</body></html>`
 }
 
@@ -38,6 +40,55 @@ export function MessageView(props: {
 }): JSX.Element {
   const { detail } = props
   const [savingIndex, setSavingIndex] = useState<number | null>(null)
+  const frameRef = useRef<HTMLIFrameElement>(null)
+  const observerRef = useRef<ResizeObserver | null>(null)
+  const [frameHeight, setFrameHeight] = useState(320)
+
+  // Höhe bei Nachrichtenwechsel zurücksetzen
+  useEffect(() => {
+    setFrameHeight(320)
+  }, [detail?.uid])
+
+  useEffect(() => () => observerRef.current?.disconnect(), [])
+
+  function fitFrame(): void {
+    const doc = frameRef.current?.contentDocument
+    if (!doc?.body) return
+    const h = Math.max(doc.body.scrollHeight, doc.documentElement?.scrollHeight ?? 0)
+    if (h > 0) setFrameHeight(h + 4)
+  }
+
+  function handleFrameLoad(): void {
+    fitFrame()
+    const doc = frameRef.current?.contentDocument
+    if (!doc) return
+    // Links im System-Browser öffnen statt im iframe navigieren
+    doc.addEventListener('click', (e) => {
+      const anchor = (e.target as HTMLElement | null)?.closest('a')
+      const href = anchor?.getAttribute('href')
+      if (href && /^https?:/i.test(href)) {
+        e.preventDefault()
+        props.onOpenExternal(href)
+      }
+    })
+    // nachladende Bilder / Webfonts -> Höhe nachführen
+    doc.querySelectorAll('img').forEach((img) => {
+      if (!img.complete) {
+        img.addEventListener('load', fitFrame, { once: true })
+        img.addEventListener('error', fitFrame, { once: true })
+      }
+    })
+    observerRef.current?.disconnect()
+    try {
+      const ro = new ResizeObserver(() => fitFrame())
+      ro.observe(doc.body)
+      observerRef.current = ro
+    } catch {
+      /* ResizeObserver nicht verfügbar – Timeouts als Sicherheitsnetz */
+    }
+    setTimeout(fitFrame, 300)
+    setTimeout(fitFrame, 1200)
+  }
 
   async function saveAttachment(index: number): Promise<void> {
     setSavingIndex(index)
@@ -177,10 +228,14 @@ export function MessageView(props: {
           <div className="mt-5">
             {srcDoc ? (
               <iframe
+                ref={frameRef}
                 title="E-Mail-Inhalt"
-                sandbox=""
+                sandbox="allow-same-origin"
                 srcDoc={srcDoc}
-                className="h-[calc(100vh-320px)] min-h-[300px] w-full rounded-lg border border-line"
+                onLoad={handleFrameLoad}
+                scrolling="no"
+                style={{ height: frameHeight }}
+                className="w-full rounded-lg border border-line"
               />
             ) : (
               <pre className="mail-html whitespace-pre-wrap font-sans text-base text-ink">
