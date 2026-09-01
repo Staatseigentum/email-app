@@ -13,13 +13,26 @@ Ein moderner Desktop-E-Mail-Client auf Basis von **Electron + React + TypeScript
   richtige Seite zum IMAP-Aktivieren bzw. App-Passwort-Erstellen.
 - **Demo-Postfach** – voll funktionsfähiges Offline-Konto zum Ausprobieren, ohne Server.
 - **E-Mails schreiben & senden** – Verfassen-Fenster mit An/Cc/Bcc, Antworten, Allen
-  antworten und Weiterleiten (inkl. Zitat).
+  antworten und Weiterleiten (inkl. Zitat), Signatur pro Konto.
+- **Entwürfe** – das Verfassen-Fenster speichert automatisch in den Entwürfe-Ordner;
+  ein Klick auf einen Entwurf öffnet ihn wieder.
+- **Senden rückgängig** – konfigurierbare Wartezeit (0–30 s) vor dem echten Versand.
 - **Posteingang lesen** – Ordnerliste mit Ungelesen-Zählern, Nachrichtenliste mit
-  Vorschau, HTML-Ansicht in einer abgeschotteten Sandbox, Anhänge-Übersicht.
-- **Desktop-Benachrichtigungen** – dauerhafte IMAP-IDLE-Verbindung pro Konto; bei neuer
-  Post erscheint eine native System-Benachrichtigung, Klick fokussiert das Fenster.
+  Vorschau, HTML-Ansicht in einer abgeschotteten Sandbox, Anhänge-Übersicht mit
+  Bild-/PDF-Vorschau, endloses Nachladen älterer Mails.
+- **Konversationen** – Nachrichten lassen sich nach Thread gruppieren (References/Betreff).
+- **Gemeinsamer Posteingang** – ein zusammengeführter INBOX-Blick über alle Konten.
+- **Server-Suche** – Volltextsuche per IMAP im aktuellen Ordner oder allen Ordnern.
+- **Verschieben & Archivieren** – Nachrichten per Kürzel (`E`), Hover-Aktion oder
+  Befehlspalette in Archiv/Ordner verschieben, auch als Mehrfachauswahl.
+- **Desktop-Benachrichtigungen** – dauerhafte IMAP-IDLE-Verbindung pro Konto; native
+  System-Benachrichtigung mit Aktionen (Antworten, Archivieren), einstellbar auf
+  alle Ordner / nur Posteingang / aus.
+- **Externe Inhalte blockieren** – Bilder und Tracker in HTML-Mails werden bis zur
+  Freigabe geblockt; Absender lassen sich dauerhaft freischalten.
 - **Nachrichten verwalten** – als gelesen/ungelesen markieren, mit Stern versehen, löschen.
-- **Modernes UI** – Hell-/Dunkelmodus, Akzentfarben pro Konto, flüssige Übergänge.
+- **Modernes UI** – Hell-/Dunkelmodus, Listendichte, Befehlspalette (Strg K),
+  Akzentfarben pro Konto, flüssige Übergänge.
 - **Sichere Ablage** – Passwörter werden lokal über den System-Schlüsselbund
   (`safeStorage`) verschlüsselt; keine Cloud, kein Tracking.
 

@@ -48,6 +48,11 @@ export class MailManager extends EventEmitter {
     return conn
   }
 
+  /** Alle aktiven Konto-Verbindungen (ohne Wegwerf-Postfächer). */
+  entries(): [string, MailConnection][] {
+    return [...this.connections.entries()].filter(([id]) => !id.startsWith('temp:'))
+  }
+
   async stopAll(): Promise<void> {
     await Promise.allSettled([...this.connections.values()].map((c) => c.stop()))
     this.connections.clear()

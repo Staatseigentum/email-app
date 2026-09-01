@@ -136,6 +136,13 @@ interface EnvelopeAddress {
   address?: string
 }
 
+function parseReferences(headers: unknown): string[] {
+  if (!headers) return []
+  const text = Buffer.isBuffer(headers) ? headers.toString('utf-8') : String(headers)
+  const ids = text.match(/<[^<>@\s]+@[^<>\s]+>/g)
+  return ids ? [...new Set(ids)] : []
+}
+
 function summaryFromFetch(msg: {
   uid: number
   seq: number
@@ -145,12 +152,17 @@ function summaryFromFetch(msg: {
     from?: EnvelopeAddress[]
     to?: EnvelopeAddress[]
     date?: Date
+    messageId?: string
+    inReplyTo?: string
   }
   bodyStructure?: unknown
+  headers?: unknown
 }): MessageSummary {
   const env = msg.envelope ?? {}
   const from = env.from?.[0] ?? {}
   const flags = msg.flags ?? new Set<string>()
+  const refs = new Set(parseReferences(msg.headers))
+  if (env.inReplyTo) for (const id of parseReferences(env.inReplyTo)) refs.add(id)
   return {
     uid: msg.uid,
     seq: msg.seq,
@@ -162,7 +174,9 @@ function summaryFromFetch(msg: {
     seen: flags.has('\\Seen'),
     flagged: flags.has('\\Flagged'),
     hasAttachments: hasAttachments(msg.bodyStructure),
-    snippet: ''
+    snippet: '',
+    messageId: env.messageId || undefined,
+    references: refs.size ? [...refs] : undefined
   }
 }
 
@@ -271,7 +285,7 @@ export class AccountConnection {
     const pending: { summary: MessageSummary; uid: number; part?: SnippetPart }[] = []
     for await (const msg of client.fetch(
       range,
-      { uid: true, envelope: true, flags: true, bodyStructure: true },
+      { uid: true, envelope: true, flags: true, bodyStructure: true, headers: ['references'] },
       { uid: true }
     )) {
       if (msg.uid <= this.lastUid) continue
@@ -344,7 +358,7 @@ export class AccountConnection {
       const rows: { summary: MessageSummary; seq: number; part?: SnippetPart }[] = []
       for await (const msg of client.fetch(
         range,
-        { envelope: true, flags: true, bodyStructure: true, bodyParts: ['1'] },
+        { envelope: true, flags: true, bodyStructure: true, bodyParts: ['1'], headers: ['references'] },
         {}
       )) {
         const part = pickSnippetPart(msg.bodyStructure)
@@ -392,6 +406,12 @@ export class AccountConnection {
       const { content } = await client.download(String(uid), undefined, { uid: true })
       const parsed = await simpleParser(content)
       const fromAddr = parsed.from?.value?.[0]
+      const refs = Array.isArray(parsed.references)
+        ? parsed.references
+        : parsed.references
+          ? [parsed.references]
+          : []
+      if (parsed.inReplyTo) refs.push(...parseReferences(parsed.inReplyTo))
       return {
         uid,
         seq: 0,
@@ -405,6 +425,8 @@ export class AccountConnection {
         flagged: false,
         hasAttachments: (parsed.attachments?.length ?? 0) > 0,
         snippet: decodeSnippet(parsed.text),
+        messageId: parsed.messageId || undefined,
+        references: refs.length ? [...new Set(refs)] : undefined,
         html: typeof parsed.html === 'string' ? parsed.html : null,
         text: parsed.text ?? null,
         attachments: (parsed.attachments ?? []).map((a, index) => ({
@@ -469,6 +491,131 @@ export class AccountConnection {
     const lock = await client.getMailboxLock(mailbox)
     try {
       await client.messageDelete(String(uid), { uid: true })
+    } finally {
+      lock.release()
+    }
+  }
+
+  /**
+   * Verschiebt eine Nachricht in einen anderen Ordner. `target` ist ein Ordnerpfad
+   * oder ein Special-Use-Token (z. B. `\Archive`, `\Junk`, `\Trash`).
+   */
+  async moveMessage(mailbox: string, uid: number, target: string): Promise<void> {
+    const client = await this.ensureWork()
+    let path = target
+    if (target.startsWith('\\')) {
+      const boxes = await client.list()
+      const re: Record<string, RegExp> = {
+        '\\Archive': /archiv/i,
+        '\\Junk': /junk|spam/i,
+        '\\Trash': /trash|papierkorb|deleted/i,
+        '\\Sent': /sent|gesendet/i
+      }
+      path =
+        boxes.find((b) => b.specialUse === target)?.path ||
+        boxes.find((b) => re[target]?.test(b.name))?.path ||
+        target
+      if (path === target && target === '\\Archive') {
+        await client.mailboxCreate('Archive').catch(() => {})
+        path = 'Archive'
+      }
+    }
+    const lock = await client.getMailboxLock(mailbox)
+    try {
+      await client.messageMove(String(uid), path, { uid: true })
+    } finally {
+      lock.release()
+    }
+  }
+
+  /** Server-seitige Volltextsuche (aktueller Ordner oder alle Ordner). */
+  async search(
+    text: string,
+    scope: 'mailbox' | 'all',
+    mailbox: string
+  ): Promise<MessageSummary[]> {
+    const client = await this.ensureWork()
+    const term = text.trim()
+    if (!term) return []
+    const targets =
+      scope === 'all'
+        ? (await client.list())
+            .filter((b) => !b.flags?.has('\\Noselect'))
+            .map((b) => b.path)
+        : [mailbox]
+
+    const results: MessageSummary[] = []
+    for (const path of targets) {
+      const lock = await client.getMailboxLock(path)
+      try {
+        const uids = (await client.search({ text: term }, { uid: true })) as number[]
+        if (!uids || uids.length === 0) continue
+        const pick = uids.slice(-40).reverse()
+        for await (const msg of client.fetch(
+          pick.join(','),
+          { uid: true, envelope: true, flags: true, bodyStructure: true, headers: ['references'] },
+          { uid: true }
+        )) {
+          const summary = summaryFromFetch(msg)
+          summary.accountId = this.accountId
+          summary.mailbox = path
+          results.push(summary)
+        }
+      } catch {
+        /* Ordner ohne Suchrecht überspringen */
+      } finally {
+        lock.release()
+      }
+    }
+    return results
+      .sort((a, b) => +new Date(b.date) - +new Date(a.date))
+      .slice(0, 80)
+  }
+
+  /** Legt einen Entwurf im Drafts-Ordner ab (ersetzt optional einen alten). */
+  async saveDraft(mime: Buffer, replaceUid?: number): Promise<{ uid: number; mailbox: string }> {
+    const client = await this.ensureWork()
+    const boxes = await client.list()
+    const drafts =
+      boxes.find((b) => b.specialUse === '\\Drafts')?.path ||
+      boxes.find((b) => /draft|entw/i.test(b.name))?.path ||
+      'Drafts'
+    if (replaceUid && replaceUid > 0) {
+      try {
+        const lock = await client.getMailboxLock(drafts)
+        try {
+          await client.messageDelete(String(replaceUid), { uid: true })
+        } finally {
+          lock.release()
+        }
+      } catch {
+        /* alter Entwurf schon weg */
+      }
+    }
+    const res = await client.append(drafts, mime, ['\\Draft', '\\Seen'])
+    const uid =
+      res && typeof res === 'object' && 'uid' in res ? Number((res as { uid: number }).uid) : 0
+    return { uid, mailbox: drafts }
+  }
+
+  /** Anhang-Inhalt als Base64 (für Inline-Vorschau). */
+  async attachmentData(
+    mailbox: string,
+    uid: number,
+    index: number
+  ): Promise<{ filename: string; contentType: string; base64: string }> {
+    const client = await this.ensureWork()
+    const lock = await client.getMailboxLock(mailbox)
+    try {
+      const { content } = await client.download(String(uid), undefined, { uid: true })
+      const parsed = await simpleParser(content)
+      const att = parsed.attachments?.[index]
+      if (!att) throw new Error('Anhang nicht gefunden')
+      return {
+        filename: att.filename || 'anhang',
+        contentType: att.contentType || 'application/octet-stream',
+        base64: (att.content as Buffer).toString('base64')
+      }
     } finally {
       lock.release()
     }

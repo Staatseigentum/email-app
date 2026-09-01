@@ -58,6 +58,14 @@ export interface MessageSummary {
   flagged: boolean
   hasAttachments: boolean
   snippet: string
+  /** Message-ID der Nachricht (für Threading). */
+  messageId?: string
+  /** Referenzierte Message-IDs (References/In-Reply-To, für Threading). */
+  references?: string[]
+  /** Nur in aggregierten Listen (Unified Inbox, Suche): Herkunfts-Konto. */
+  accountId?: string
+  /** Nur in aggregierten Listen: Herkunfts-Ordner. */
+  mailbox?: string
 }
 
 export interface MessageAttachment {
@@ -92,6 +100,39 @@ export interface ComposePayload {
   inReplyTo?: string
   references?: string
   attachments?: OutgoingAttachment[]
+}
+
+/** Ein Entwurf, wie er in den Drafts-Ordner geschrieben wird. */
+export interface DraftPayload extends ComposePayload {
+  /** UID eines bereits gespeicherten Entwurfs, der ersetzt werden soll. */
+  replaceUid?: number
+}
+
+export interface DraftSaved {
+  uid: number
+  mailbox: string
+}
+
+/** Persistente App-Einstellungen (im Main-Prozess gespeichert). */
+export interface AppSettings {
+  /** Sekunden bis eine gesendete Mail wirklich rausgeht (0 = sofort). */
+  undoSendSeconds: number
+  /** Externe Bilder/Inhalte in HTML-Mails zunächst blockieren. */
+  blockRemoteContent: boolean
+  /** Für welche Mails benachrichtigt wird. */
+  notify: 'all' | 'inbox' | 'off'
+  /** Signatur je Konto-ID (reiner Text). */
+  signatures: Record<string, string>
+  /** Absender/Domains, deren externe Inhalte immer geladen werden. */
+  remoteAllow: string[]
+}
+
+export interface SearchQuery {
+  accountId: string
+  text: string
+  /** 'mailbox' = nur aktueller Ordner, 'all' = alle Ordner des Kontos. */
+  scope: 'mailbox' | 'all'
+  mailbox: string
 }
 
 /** Wegwerf-Postfach (mail.tm) – öffentliche Felder ohne Geheimnisse. */
