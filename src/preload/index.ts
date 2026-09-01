@@ -1,8 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '../shared/ipc'
 import type {
+  AppSettings,
   ComposePayload,
   ConnectionStatus,
+  DraftPayload,
+  DraftSaved,
   IpcResult,
   MailAccount,
   MailAccountInput,
@@ -13,6 +16,7 @@ import type {
   OAuthClientConfig,
   OAuthProvider,
   OAuthResult,
+  SearchQuery,
   TempMailbox,
   UpdateEvent,
   UpdateInfo
@@ -43,6 +47,8 @@ const api = {
       ipcRenderer.invoke(IPC.flag, id, mailbox, uid, value),
     remove: (id: string, mailbox: string, uid: number): Promise<IpcResult<void>> =>
       ipcRenderer.invoke(IPC.deleteMessage, id, mailbox, uid),
+    move: (id: string, mailbox: string, uid: number, target: string): Promise<IpcResult<void>> =>
+      ipcRenderer.invoke(IPC.moveMessage, id, mailbox, uid, target),
     saveAttachment: (
       id: string,
       mailbox: string,
@@ -50,9 +56,26 @@ const api = {
       index: number
     ): Promise<IpcResult<{ saved: boolean; path?: string }>> =>
       ipcRenderer.invoke(IPC.saveAttachment, id, mailbox, uid, index),
+    attachmentData: (
+      id: string,
+      mailbox: string,
+      uid: number,
+      index: number
+    ): Promise<IpcResult<{ filename: string; contentType: string; base64: string }>> =>
+      ipcRenderer.invoke(IPC.attachmentData, id, mailbox, uid, index),
     send: (payload: ComposePayload): Promise<IpcResult<{ messageId: string }>> =>
       ipcRenderer.invoke(IPC.send, payload),
+    saveDraft: (payload: DraftPayload): Promise<IpcResult<DraftSaved>> =>
+      ipcRenderer.invoke(IPC.saveDraft, payload),
+    search: (q: SearchQuery): Promise<IpcResult<MessageSummary[]>> =>
+      ipcRenderer.invoke(IPC.search, q),
+    unified: (): Promise<IpcResult<MessageSummary[]>> => ipcRenderer.invoke(IPC.unified),
     sync: (id: string): Promise<IpcResult<boolean>> => ipcRenderer.invoke(IPC.sync, id)
+  },
+  settings: {
+    get: (): Promise<IpcResult<AppSettings>> => ipcRenderer.invoke(IPC.settingsGet),
+    set: (patch: Partial<AppSettings>): Promise<IpcResult<AppSettings>> =>
+      ipcRenderer.invoke(IPC.settingsSet, patch)
   },
   temp: {
     list: (): Promise<IpcResult<TempMailbox[]>> => ipcRenderer.invoke(IPC.tempList),
@@ -75,6 +98,7 @@ const api = {
   },
   openExternal: (url: string): Promise<IpcResult<boolean>> =>
     ipcRenderer.invoke(IPC.openExternal, url),
+  appVersion: (): Promise<IpcResult<string>> => ipcRenderer.invoke(IPC.appVersion),
   oauth: {
     start: (provider: OAuthProvider): Promise<IpcResult<OAuthResult>> =>
       ipcRenderer.invoke(IPC.oauthStart, provider),
@@ -107,7 +131,9 @@ const api = {
     ipcRenderer.on(IPC.onStatus, handler)
     return () => ipcRenderer.removeListener(IPC.onStatus, handler)
   },
-  onNewMail: (cb: (e: NewMailEvent & { focus?: boolean }) => void): (() => void) => {
+  onNewMail: (
+    cb: (e: NewMailEvent & { focus?: boolean; reply?: boolean }) => void
+  ): (() => void) => {
     const handler = (_e: unknown, evt: NewMailEvent): void => cb(evt)
     ipcRenderer.on(IPC.onNewMail, handler)
     return () => ipcRenderer.removeListener(IPC.onNewMail, handler)

@@ -29,11 +29,36 @@ export function AccountRail(props: {
   onActiveClick: () => void
   onAdd: () => void
   onSettings: () => void
+  onUnified?: () => void
   theme: 'dark' | 'light'
   onToggleTheme: () => void
 }): JSX.Element {
   return (
     <nav className="drag flex w-16 shrink-0 flex-col items-center gap-2 border-r border-line bg-panel py-3">
+      {props.onUnified && props.accounts.length > 1 && (
+        <>
+          <button
+            onClick={props.onUnified}
+            title="Alle Konten – gemeinsamer Posteingang"
+            aria-label="Gemeinsamer Posteingang"
+            className="no-drag relative"
+          >
+            {props.view === 'unified' && (
+              <span className="absolute -left-3 top-1.5 h-7 w-0.5 rounded-full bg-accent-hover" />
+            )}
+            <span
+              className={`grid h-10 w-10 place-items-center rounded-[3px] border transition ${
+                props.view === 'unified'
+                  ? 'border-accent-hover bg-accent-soft text-accent-strong shadow-glow'
+                  : 'border-line-control bg-chrome-2 text-ink-soft hover:border-line-hover hover:text-ink'
+              }`}
+            >
+              <Icon name="layers" size={17} />
+            </span>
+          </button>
+          <span className="h-px w-6 bg-line" />
+        </>
+      )}
       {props.accounts.map((acc) => {
         const active = acc.id === props.activeAccountId && props.view === 'mail'
         const state = props.statuses[acc.id] ?? 'connecting'

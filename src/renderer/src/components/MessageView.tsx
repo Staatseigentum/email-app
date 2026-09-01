@@ -4,14 +4,17 @@ import { Avatar } from './Avatar'
 import { formatBytes, formatMetaDate } from '../lib/format'
 import { Icon } from './Icon'
 
-function buildSrcDoc(html: string, dark: boolean): string {
+const REMOTE_RE = /(?:src|background)\s*=\s*["']?https?:|url\(\s*["']?https?:/i
+
+function buildSrcDoc(html: string, dark: boolean, blockRemote: boolean): string {
   const fg = dark ? '#c2c8e6' : '#14183a'
   const bg = dark ? '#030408' : '#ffffff'
   const link = dark ? '#c3a9ff' : '#6b2fd6'
   const quote = dark ? '#9aa3cd' : '#4b5280'
   const border = dark ? 'rgba(154,163,205,.32)' : 'rgba(42,25,88,.24)'
+  const imgSrc = blockRemote ? 'data:' : 'data: https: http:'
   return `<!doctype html><html><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: https: http:; style-src 'unsafe-inline'; font-src data:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${imgSrc}; style-src 'unsafe-inline'; font-src data:;">
 <base target="_blank">
 <style>
   :root { color-scheme: ${dark ? 'dark' : 'light'}; }
@@ -29,37 +32,52 @@ export function MessageView(props: {
   loading: boolean
   hasSelection: boolean
   theme: 'dark' | 'light'
+  blockRemote?: boolean
+  onAllowRemote?: () => void
   onReply: () => void
   onReplyAll: () => void
   onForward: () => void
   onDelete: () => void
+  onArchive?: () => void
   onToggleFlag?: (value: boolean) => void
   onOpenExternal: (url: string) => void
   onSaveAttachment: (index: number) => Promise<void>
+  onPreviewAttachment?: (
+    index: number
+  ) => Promise<{ filename: string; contentType: string; base64: string }>
   readOnly?: boolean
 }): JSX.Element {
   const { detail } = props
   const [savingIndex, setSavingIndex] = useState<number | null>(null)
+  const [showRemote, setShowRemote] = useState(false)
+  const [preview, setPreview] = useState<{ url: string; filename: string; pdf: boolean } | null>(null)
+  const [previewBusy, setPreviewBusy] = useState<number | null>(null)
   const frameRef = useRef<HTMLIFrameElement>(null)
   const observerRef = useRef<ResizeObserver | null>(null)
   const [frameHeight, setFrameHeight] = useState(320)
   const [frameWidth, setFrameWidth] = useState<number | null>(null)
 
-  // Maße bei Nachrichtenwechsel zurücksetzen
+  // Maße + Remote-Freigabe bei Nachrichtenwechsel zurücksetzen
   useEffect(() => {
     setFrameHeight(320)
     setFrameWidth(null)
+    setShowRemote(false)
+    setPreview(null)
   }, [detail?.uid])
 
   useEffect(() => () => observerRef.current?.disconnect(), [])
+
+  const hasRemote = useMemo(
+    () => (detail?.html ? REMOTE_RE.test(detail.html) : false),
+    [detail?.html, detail?.uid]
+  )
+  const blocking = Boolean(props.blockRemote) && hasRemote && !showRemote
 
   function fitFrame(): void {
     const doc = frameRef.current?.contentDocument
     if (!doc?.body) return
     const h = Math.max(doc.body.scrollHeight, doc.documentElement?.scrollHeight ?? 0)
     if (h > 0) setFrameHeight((prev) => (Math.abs(prev - (h + 4)) > 1 ? h + 4 : prev))
-    // Breite starrer Layouts (z. B. 600-px-Newsletter) übernehmen, damit nichts
-    // abgeschnitten wird – der Container scrollt dann horizontal.
     const w = Math.max(doc.body.scrollWidth, doc.documentElement?.scrollWidth ?? 0)
     setFrameWidth((prev) => {
       if (w <= 0) return prev
@@ -71,7 +89,6 @@ export function MessageView(props: {
     fitFrame()
     const doc = frameRef.current?.contentDocument
     if (!doc) return
-    // Links im System-Browser öffnen statt im iframe navigieren
     doc.addEventListener('click', (e) => {
       const anchor = (e.target as HTMLElement | null)?.closest('a')
       const href = anchor?.getAttribute('href')
@@ -80,7 +97,6 @@ export function MessageView(props: {
         props.onOpenExternal(href)
       }
     })
-    // nachladende Bilder / Webfonts -> Höhe nachführen
     doc.querySelectorAll('img').forEach((img) => {
       if (!img.complete) {
         img.addEventListener('load', fitFrame, { once: true })
@@ -93,7 +109,7 @@ export function MessageView(props: {
       ro.observe(doc.body)
       observerRef.current = ro
     } catch {
-      /* ResizeObserver nicht verfügbar – Timeouts als Sicherheitsnetz */
+      /* ResizeObserver nicht verfügbar */
     }
     setTimeout(fitFrame, 300)
     setTimeout(fitFrame, 1200)
@@ -108,9 +124,21 @@ export function MessageView(props: {
     }
   }
 
+  async function openPreview(index: number, contentType: string): Promise<void> {
+    if (!props.onPreviewAttachment) return
+    setPreviewBusy(index)
+    try {
+      const data = await props.onPreviewAttachment(index)
+      const url = `data:${data.contentType || contentType};base64,${data.base64}`
+      setPreview({ url, filename: data.filename, pdf: /pdf/i.test(data.contentType || contentType) })
+    } finally {
+      setPreviewBusy(null)
+    }
+  }
+
   const srcDoc = useMemo(
-    () => (detail?.html ? buildSrcDoc(detail.html, props.theme === 'dark') : null),
-    [detail?.html, detail?.uid, props.theme]
+    () => (detail?.html ? buildSrcDoc(detail.html, props.theme === 'dark', blocking) : null),
+    [detail?.html, detail?.uid, props.theme, blocking]
   )
 
   if (!props.hasSelection) {
@@ -133,9 +161,11 @@ export function MessageView(props: {
   const ghost =
     'grid h-8 w-8 place-items-center rounded-[3px] text-ink-soft transition hover:bg-accent-soft hover:text-ink'
 
+  const canPreview = (ct: string, name: string): boolean =>
+    /^image\//i.test(ct) || /pdf/i.test(ct) || /\.(png|jpe?g|gif|webp|bmp|svg|pdf)$/i.test(name)
+
   return (
     <div className="flex min-w-0 flex-1 flex-col bg-window">
-      {/* Aktionsleiste */}
       {!props.readOnly && (
         <div className="flex h-[52px] shrink-0 items-center gap-1.5 border-b border-line px-4">
           <button
@@ -157,6 +187,11 @@ export function MessageView(props: {
             <Icon name="forward" size={14} /> Weiterleiten
           </button>
           <span className="mx-1.5 h-[18px] w-px bg-line-control" />
+          {props.onArchive && (
+            <button onClick={props.onArchive} className={ghost} title="Archivieren (E)">
+              <Icon name="archive" size={15} />
+            </button>
+          )}
           <button
             onClick={() => props.onToggleFlag?.(!detail.flagged)}
             className={`${ghost} ${detail.flagged ? 'text-warn' : ''}`}
@@ -199,41 +234,86 @@ export function MessageView(props: {
             )}
           </div>
 
+          {blocking && (
+            <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-chrome px-3 py-2 text-xs text-ink-soft">
+              <Icon name="shield-check" size={14} className="text-accent-text" />
+              <span className="flex-1">Externe Inhalte (Bilder, Tracker) blockiert.</span>
+              <button
+                onClick={() => setShowRemote(true)}
+                className="rounded-[3px] border border-line-control px-2 py-1 text-ink transition hover:border-line-hover"
+              >
+                Anzeigen
+              </button>
+              {props.onAllowRemote && (
+                <button
+                  onClick={props.onAllowRemote}
+                  className="rounded-[3px] px-2 py-1 text-ink-mute transition hover:text-ink"
+                >
+                  Absender immer erlauben
+                </button>
+              )}
+            </div>
+          )}
+
           {detail.attachments.length > 0 && (
             <div className="mt-4 border-t border-line pt-3">
               <p className="mb-2 text-2xs font-medium uppercase tracking-[0.09em] text-ink-mute">
                 Anhänge · {detail.attachments.length}
               </p>
               <div className="flex flex-wrap gap-2.5">
-                {detail.attachments.map((a) => (
-                  <button
-                    key={a.index}
-                    onClick={() => saveAttachment(a.index)}
-                    disabled={savingIndex !== null}
-                    className="flex w-[220px] items-center gap-2.5 rounded-lg border border-line bg-chrome p-2 text-left transition hover:border-line-hover disabled:opacity-60"
-                  >
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[3px] bg-accent-soft text-accent-text">
-                      <Icon name="file-text" size={16} />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-xs font-medium text-ink">
-                        {a.filename}
+                {detail.attachments.map((a) => {
+                  const previewable = !props.readOnly && props.onPreviewAttachment && canPreview(a.contentType, a.filename)
+                  return (
+                    <div
+                      key={a.index}
+                      className="flex w-[220px] items-center gap-2.5 rounded-lg border border-line bg-chrome p-2 text-left"
+                    >
+                      <button
+                        onClick={() =>
+                          previewable ? openPreview(a.index, a.contentType) : saveAttachment(a.index)
+                        }
+                        disabled={savingIndex !== null || previewBusy !== null}
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-[3px] bg-accent-soft text-accent-text disabled:opacity-60"
+                        title={previewable ? 'Vorschau' : 'Speichern'}
+                      >
+                        <Icon
+                          name={
+                            previewBusy === a.index
+                              ? 'spinner'
+                              : previewable
+                                ? 'external-link'
+                                : 'file-text'
+                          }
+                          size={15}
+                          className={previewBusy === a.index ? 'animate-spin-slow' : ''}
+                        />
+                      </button>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-xs font-medium text-ink">
+                          {a.filename}
+                        </span>
+                        <span className="block font-mono text-2xs text-ink-mute">
+                          {formatBytes(a.size)}
+                        </span>
                       </span>
-                      <span className="block font-mono text-2xs text-ink-mute">
-                        {formatBytes(a.size)}
-                      </span>
-                    </span>
-                    <Icon
-                      name={savingIndex === a.index ? 'spinner' : 'download'}
-                      size={13}
-                      className={`shrink-0 text-ink-mute ${savingIndex === a.index ? 'animate-spin-slow' : ''}`}
-                    />
-                  </button>
-                ))}
+                      <button
+                        onClick={() => saveAttachment(a.index)}
+                        disabled={savingIndex !== null}
+                        title="Speichern"
+                        className="shrink-0 text-ink-mute transition hover:text-ink disabled:opacity-60"
+                      >
+                        <Icon
+                          name={savingIndex === a.index ? 'spinner' : 'download'}
+                          size={13}
+                          className={savingIndex === a.index ? 'animate-spin-slow' : ''}
+                        />
+                      </button>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
-
         </div>
 
         {srcDoc ? (
@@ -272,6 +352,41 @@ export function MessageView(props: {
           </div>
         )}
       </div>
+
+      {preview && (
+        <div
+          className="fixed inset-0 z-[70] flex flex-col bg-[var(--scrim)] p-6 backdrop-blur-[3px]"
+          onClick={() => setPreview(null)}
+        >
+          <div className="mb-3 flex items-center gap-3 text-sm text-white">
+            <Icon name="paperclip" size={14} />
+            <span className="flex-1 truncate">{preview.filename}</span>
+            <button
+              onClick={() => setPreview(null)}
+              className="grid h-8 w-8 place-items-center rounded-[3px] bg-white/10 text-white transition hover:bg-white/20"
+            >
+              <Icon name="x" size={16} />
+            </button>
+          </div>
+          <div className="min-h-0 flex-1" onClick={(e) => e.stopPropagation()}>
+            {preview.pdf ? (
+              <iframe
+                title={preview.filename}
+                src={preview.url}
+                className="h-full w-full rounded-lg border-0 bg-white"
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center">
+                <img
+                  src={preview.url}
+                  alt={preview.filename}
+                  className="max-h-full max-w-full rounded-lg object-contain"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

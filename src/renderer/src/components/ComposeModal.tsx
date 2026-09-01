@@ -1,15 +1,29 @@
-import { useRef, useState } from 'react'
-import type { ComposePayload, MailAccount, OutgoingAttachment } from '../../../shared/types'
+import { useEffect, useRef, useState } from 'react'
+import type {
+  ComposePayload,
+  DraftPayload,
+  DraftSaved,
+  MailAccount,
+  OutgoingAttachment
+} from '../../../shared/types'
 import { formatBytes } from '../lib/format'
 import { modalOverlay } from '../lib/ui'
 import { IconFile, IconPaperclip, IconSend, IconX } from './Icons'
+
+const api = window.mailwave
 
 export interface ComposeSeed {
   accountId: string
   to?: string
   cc?: string
+  bcc?: string
   subject?: string
   body?: string
+  attachments?: OutgoingAttachment[]
+  inReplyTo?: string
+  references?: string
+  /** UID eines bestehenden Entwurfs, der hier bearbeitet wird. */
+  draftUid?: number
 }
 
 interface Attachment extends OutgoingAttachment {
@@ -34,24 +48,68 @@ async function toAttachment(file: File): Promise<Attachment> {
 export function ComposeModal(props: {
   seed: ComposeSeed
   accounts: MailAccount[]
+  draftsPath?: string
   onClose: () => void
   onSend: (payload: ComposePayload) => Promise<void>
+  onSaveDraft?: (payload: DraftPayload) => Promise<DraftSaved | null>
 }): JSX.Element {
   const [accountId, setAccountId] = useState(props.seed.accountId)
   const [to, setTo] = useState(props.seed.to ?? '')
   const [cc, setCc] = useState(props.seed.cc ?? '')
-  const [bcc, setBcc] = useState('')
-  const [showCc, setShowCc] = useState(Boolean(props.seed.cc))
+  const [bcc, setBcc] = useState(props.seed.bcc ?? '')
+  const [showCc, setShowCc] = useState(Boolean(props.seed.cc || props.seed.bcc))
   const [subject, setSubject] = useState(props.seed.subject ?? '')
   const [body, setBody] = useState(props.seed.body ?? '')
-  const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [attachments, setAttachments] = useState<Attachment[]>(
+    (props.seed.attachments ?? []).map((a) => ({
+      ...a,
+      size: Math.floor((a.contentBase64.length * 3) / 4)
+    }))
+  )
   const [dragging, setDragging] = useState(false)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [draftState, setDraftState] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const draftUid = useRef(props.seed.draftUid ?? 0)
+  const sentRef = useRef(false)
   const fileInput = useRef<HTMLInputElement>(null)
 
   const totalSize = attachments.reduce((s, a) => s + a.size, 0)
   const canSend = to.trim().length > 0 && !sending
+
+  const payload = (): DraftPayload => ({
+    accountId,
+    to,
+    cc,
+    bcc,
+    subject,
+    text: body,
+    inReplyTo: props.seed.inReplyTo,
+    references: props.seed.references,
+    replaceUid: draftUid.current || undefined,
+    attachments: attachments.map(({ filename, contentType, contentBase64 }) => ({
+      filename,
+      contentType,
+      contentBase64
+    }))
+  })
+
+  // Automatisches Speichern in den Entwürfe-Ordner
+  useEffect(() => {
+    if (!props.onSaveDraft) return
+    if (sentRef.current) return
+    const empty =
+      !to.trim() && !cc.trim() && !bcc.trim() && !subject.trim() && !body.trim() && attachments.length === 0
+    if (empty) return
+    const t = setTimeout(async () => {
+      setDraftState('saving')
+      const res = await props.onSaveDraft?.(payload())
+      if (res && res.uid) draftUid.current = res.uid
+      setDraftState(res ? 'saved' : 'idle')
+    }, 2500)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [to, cc, bcc, subject, body, attachments, accountId])
 
   async function addFiles(files: FileList | File[]): Promise<void> {
     const added = await Promise.all(Array.from(files).map(toAttachment))
@@ -69,12 +127,18 @@ export function ComposeModal(props: {
         bcc,
         subject,
         text: body,
+        inReplyTo: props.seed.inReplyTo,
+        references: props.seed.references,
         attachments: attachments.map(({ filename, contentType, contentBase64 }) => ({
           filename,
           contentType,
           contentBase64
         }))
       })
+      sentRef.current = true
+      if (draftUid.current && props.draftsPath) {
+        void api.mail.remove(accountId, props.draftsPath, draftUid.current)
+      }
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -242,11 +306,18 @@ export function ComposeModal(props: {
               e.target.value = ''
             }}
           />
+          {props.onSaveDraft && draftState !== 'idle' && (
+            <span className="ml-auto text-xs text-slate-400">
+              {draftState === 'saving' ? 'Entwurf wird gespeichert …' : 'Entwurf gespeichert'}
+            </span>
+          )}
           <button
             onClick={props.onClose}
-            className="ml-auto text-sm text-slate-500 transition hover:text-slate-800 dark:hover:text-white"
+            className={`${
+              props.onSaveDraft && draftState !== 'idle' ? '' : 'ml-auto'
+            } text-sm text-slate-500 transition hover:text-slate-800 dark:hover:text-white`}
           >
-            Verwerfen
+            {draftUid.current ? 'Schließen' : 'Verwerfen'}
           </button>
         </div>
       </div>

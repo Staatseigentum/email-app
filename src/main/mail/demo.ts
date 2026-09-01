@@ -35,6 +35,7 @@ const FOLDERS: { path: string; name: string; specialUse?: string }[] = [
   { path: 'INBOX', name: 'Posteingang', specialUse: '\\Inbox' },
   { path: 'Sent', name: 'Gesendet', specialUse: '\\Sent' },
   { path: 'Drafts', name: 'Entwürfe', specialUse: '\\Drafts' },
+  { path: 'Archive', name: 'Archiv', specialUse: '\\Archive' },
   { path: 'Trash', name: 'Papierkorb', specialUse: '\\Trash' }
 ]
 
@@ -211,6 +212,38 @@ export class DemoConnection {
 
   async downloadAttachment(): Promise<{ filename: string; content: Buffer }> {
     throw new Error('Anhänge sind im Demo-Postfach nicht speicherbar.')
+  }
+
+  async attachmentData(): Promise<{ filename: string; contentType: string; base64: string }> {
+    throw new Error('Anhänge sind im Demo-Postfach nicht verfügbar.')
+  }
+
+  async moveMessage(mailbox: string, uid: number, target: string): Promise<void> {
+    const msg = this.data.messages.find((m) => m.mailbox === mailbox && m.uid === uid)
+    if (!msg) return
+    msg.mailbox = target.startsWith('\\')
+      ? FOLDERS.find((f) => f.specialUse === target)?.path ?? 'Archive'
+      : target
+    this.persist()
+  }
+
+  async search(text: string): Promise<MessageSummary[]> {
+    const q = text.trim().toLowerCase()
+    if (!q) return []
+    return this.data.messages
+      .filter(
+        (m) =>
+          m.subject.toLowerCase().includes(q) ||
+          m.fromName.toLowerCase().includes(q) ||
+          m.fromAddress.toLowerCase().includes(q) ||
+          m.text.toLowerCase().includes(q)
+      )
+      .sort((a, b) => +new Date(b.date) - +new Date(a.date))
+      .map((m) => ({ ...this.toSummary(m), accountId: this.accountId, mailbox: m.mailbox }))
+  }
+
+  async saveDraft(): Promise<{ uid: number; mailbox: string }> {
+    return { uid: 0, mailbox: 'Drafts' }
   }
 
   async markAllSeen(mailbox: string): Promise<void> {

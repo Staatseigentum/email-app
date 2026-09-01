@@ -9,6 +9,8 @@ export interface Toast {
   title?: string
   tone?: ToastTone
   action?: { label: string; onClick: () => void }
+  /** Bleibt stehen, bis er programmatisch geschlossen wird. */
+  sticky?: boolean
 }
 
 const TONE: Record<ToastTone, { icon: IconName; color: string }> = {
@@ -22,10 +24,11 @@ function ToastCard(props: { toast: Toast; onClose: (id: string) => void }): JSX.
   const tone = TONE[toast.tone ?? 'info']
 
   useEffect(() => {
+    if (toast.sticky) return
     const ms = toast.tone === 'error' ? 7000 : 4500
     const t = setTimeout(() => onClose(toast.id), ms)
     return () => clearTimeout(t)
-  }, [toast.id, toast.tone, onClose])
+  }, [toast.id, toast.tone, toast.sticky, onClose])
 
   return (
     <div className="animate-toast-in pointer-events-auto flex w-[340px] items-start gap-2.5 rounded-lg border border-line bg-chrome p-3 shadow-popover">

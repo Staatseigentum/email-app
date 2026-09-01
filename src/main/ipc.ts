@@ -1,17 +1,22 @@
-import { BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron'
 import { readFileSync, writeFileSync } from 'fs'
 import { IPC } from '../shared/ipc'
 import type {
+  AppSettings,
   ComposePayload,
+  DraftPayload,
   IpcResult,
   MailAccountInput,
+  MessageSummary,
   NewMailEvent,
-  OAuthProvider
+  OAuthProvider,
+  SearchQuery
 } from '../shared/types'
 import { accountStore } from './store'
+import { settingsStore } from './settings'
 import { mailManager } from './mail/manager'
 import { testConnection } from './mail/imapClient'
-import { sendMail, verifySmtp } from './mail/smtp'
+import { buildMime, sendMail, verifySmtp } from './mail/smtp'
 import { DemoConnection, isDemoAccount } from './mail/demo'
 import { TempMailService } from './mail/tempMail'
 import { runOAuth } from './oauth'
@@ -66,7 +71,10 @@ export function registerIpc(): void {
     const isTemp = evt.accountId.startsWith('temp:')
     const acc = isTemp ? undefined : accountStore.get(evt.accountId)
     const context = isTemp ? 'Wegwerf-Postfach' : acc?.label
-    if (Notification.isSupported()) {
+    const notify = settingsStore.get().notify
+    const allowed =
+      notify === 'all' || (notify === 'inbox' && (isTemp || evt.mailbox === 'INBOX'))
+    if (allowed && Notification.isSupported()) {
       const preview = evt.message.snippet
         ? `${evt.message.subject}\n${evt.message.snippet}`
         : evt.message.subject
@@ -76,14 +84,30 @@ export function registerIpc(): void {
         body: preview,
         subtitle: context,
         silent: false,
+        actions: isTemp ? [] : [{ type: 'button', text: 'Antworten' }, { type: 'button', text: 'Archivieren' }],
         ...(icon ? { icon } : {})
       })
-      n.on('click', () => {
+      const focusWin = (): BrowserWindow | undefined => {
         const win = BrowserWindow.getAllWindows()[0]
         if (win) {
           if (win.isMinimized()) win.restore()
           win.focus()
-          win.webContents.send(IPC.onNewMail, { ...evt, focus: true })
+        }
+        return win
+      }
+      n.on('click', () => focusWin()?.webContents.send(IPC.onNewMail, { ...evt, focus: true }))
+      n.on('action', (_e, index) => {
+        if (index === 0) {
+          focusWin()?.webContents.send(IPC.onNewMail, { ...evt, focus: true, reply: true })
+        } else if (index === 1) {
+          try {
+            void mailManager
+              .get(evt.accountId)
+              .moveMessage(evt.mailbox, evt.message.uid, '\\Archive')
+              .catch(() => {})
+          } catch {
+            /* Konto nicht mehr verbunden */
+          }
         }
       })
       n.show()
@@ -176,6 +200,55 @@ export function registerIpc(): void {
 
   ipcMain.handle(IPC.deleteMessage, (_e, id: string, mailbox: string, uid: number) =>
     wrap(() => mailManager.get(id).deleteMessage(mailbox, uid))
+  )
+
+  ipcMain.handle(
+    IPC.moveMessage,
+    (_e, id: string, mailbox: string, uid: number, target: string) =>
+      wrap(() => mailManager.get(id).moveMessage(mailbox, uid, target))
+  )
+
+  ipcMain.handle(IPC.search, (_e, q: SearchQuery) =>
+    wrap(() => mailManager.get(q.accountId).search(q.text, q.scope, q.mailbox))
+  )
+
+  ipcMain.handle(IPC.unified, () =>
+    wrap(async () => {
+      const lists = await Promise.all(
+        mailManager.entries().map(async ([id, conn]) => {
+          try {
+            const msgs = await conn.listMessages('INBOX', 0)
+            return msgs.map((m) => ({ ...m, accountId: id, mailbox: 'INBOX' }))
+          } catch {
+            return [] as MessageSummary[]
+          }
+        })
+      )
+      return lists
+        .flat()
+        .sort((a, b) => +new Date(b.date) - +new Date(a.date))
+        .slice(0, 120)
+    })
+  )
+
+  ipcMain.handle(IPC.saveDraft, (_e, payload: DraftPayload) =>
+    wrap(async () => {
+      const mime = await buildMime(payload)
+      return mailManager.get(payload.accountId).saveDraft(mime, payload.replaceUid)
+    })
+  )
+
+  ipcMain.handle(
+    IPC.attachmentData,
+    (_e, id: string, mailbox: string, uid: number, index: number) =>
+      wrap(() => mailManager.get(id).attachmentData(mailbox, uid, index))
+  )
+
+  ipcMain.handle(IPC.appVersion, () => wrap(async () => app.getVersion()))
+
+  ipcMain.handle(IPC.settingsGet, () => wrap(async () => settingsStore.get()))
+  ipcMain.handle(IPC.settingsSet, (_e, patch: Partial<AppSettings>) =>
+    wrap(async () => settingsStore.set(patch))
   )
 
   ipcMain.handle(
