@@ -196,6 +196,7 @@ export class AccountConnection {
   readonly accountId: string
   private idleClient: ImapFlow | null = null
   private workClient: ImapFlow | null = null
+  private workPromise: Promise<ImapFlow> | null = null
   private lastUid = 0
   private closed = false
   private reconnectTimer: NodeJS.Timeout | null = null
@@ -239,13 +240,30 @@ export class AccountConnection {
 
   private async ensureWork(): Promise<ImapFlow> {
     if (this.workClient?.usable) return this.workClient
-    this.emitStatus('connecting')
-    const client = new ImapFlow(await this.options())
-    client.on('error', () => {})
-    await client.connect()
-    this.workClient = client
-    this.emitStatus('online')
-    return client
+    if (this.workPromise) return this.workPromise
+    this.workPromise = (async () => {
+      this.emitStatus('connecting')
+      const client = new ImapFlow(await this.options())
+      client.on('error', () => {})
+      try {
+        await client.connect()
+        if (this.closed) {
+          await client.logout().catch(() => {})
+          throw new Error('Verbindung wurde geschlossen')
+        }
+        this.workClient = client
+        this.emitStatus('online')
+        return client
+      } catch (err) {
+        this.emitStatus('error', (err as Error).message)
+        throw err
+      }
+    })()
+    try {
+      return await this.workPromise
+    } finally {
+      this.workPromise = null
+    }
   }
 
   private async startIdle(): Promise<void> {
@@ -320,27 +338,16 @@ export class AccountConnection {
 
   async listMailboxes(): Promise<MailboxNode[]> {
     const client = await this.ensureWork()
-    const boxes = await client.list()
-    const nodes: MailboxNode[] = []
-    for (const box of boxes) {
-      let unseen = 0
-      let total = 0
-      try {
-        const status = await client.status(box.path, { messages: true, unseen: true })
-        unseen = status.unseen ?? 0
-        total = status.messages ?? 0
-      } catch {
-        /* Ordner ohne SELECT-Recht überspringen */
-      }
-      nodes.push({
-        path: box.path,
-        name: box.name,
-        specialUse: box.specialUse,
-        unseen,
-        total
-      })
-    }
-    return nodes
+    // LIST-STATUS spart bei unterstützten Servern einen Roundtrip je Ordner;
+    // ImapFlow fällt bei älteren Servern intern auf STATUS zurück.
+    const boxes = await client.list({ statusQuery: { messages: true, unseen: true } })
+    return boxes.map((box) => ({
+      path: box.path,
+      name: box.name,
+      specialUse: box.specialUse,
+      unseen: box.status?.unseen ?? 0,
+      total: box.status?.messages ?? 0
+    }))
   }
 
   async listMessages(mailbox: string, page = 0): Promise<MessageSummary[]> {

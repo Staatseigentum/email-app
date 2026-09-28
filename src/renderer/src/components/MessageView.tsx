@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MessageDetail } from '../../../shared/types'
+import { extractOneTimeCode } from '../../../shared/oneTimeCode'
 import { Avatar } from './Avatar'
 import { formatBytes, formatMetaDate } from '../lib/format'
 import { Icon } from './Icon'
@@ -41,6 +42,7 @@ export function MessageView(props: {
   onArchive?: () => void
   onToggleFlag?: (value: boolean) => void
   onOpenExternal: (url: string) => void
+  onCopyCode?: (code: string) => void
   onSaveAttachment: (index: number) => Promise<void>
   onPreviewAttachment?: (
     index: number
@@ -72,6 +74,9 @@ export function MessageView(props: {
     [detail?.html, detail?.uid]
   )
   const blocking = Boolean(props.blockRemote) && hasRemote && !showRemote
+  const oneTimeCode = detail
+    ? extractOneTimeCode(detail.subject, detail.text ?? detail.snippet)
+    : null
 
   function fitFrame(): void {
     const doc = frameRef.current?.contentDocument
@@ -233,6 +238,19 @@ export function MessageView(props: {
               </>
             )}
           </div>
+
+          {oneTimeCode && props.onCopyCode && (
+            <div className="mt-4 flex items-center gap-3 rounded-lg border border-accent/30 bg-accent-soft px-3 py-2">
+              <span className="text-xs text-ink-soft">Einmalcode</span>
+              <span className="font-mono text-base font-semibold tracking-wider text-ink">{oneTimeCode}</span>
+              <button
+                onClick={() => props.onCopyCode?.(oneTimeCode)}
+                className="ml-auto rounded-[3px] border border-line-control bg-chrome px-2.5 py-1 text-xs font-medium text-ink hover:border-line-hover"
+              >
+                Kopieren
+              </button>
+            </div>
+          )}
 
           {blocking && (
             <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-chrome px-3 py-2 text-xs text-ink-soft">

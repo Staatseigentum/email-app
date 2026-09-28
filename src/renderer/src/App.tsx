@@ -8,6 +8,7 @@ import type {
   MessageDetail,
   MessageSummary
 } from '../../shared/types'
+import { extractOneTimeCode } from '../../shared/oneTimeCode'
 import { AccountRail } from './components/AccountRail'
 import { AccountPopover } from './components/AccountPopover'
 import { Sidebar } from './components/Sidebar'
@@ -85,6 +86,8 @@ export default function App(): JSX.Element {
   const activeAccount = accounts.find((a) => a.id === activeAccountId) ?? null
 
   const listReqId = useRef(0)
+  const mailboxReqId = useRef(0)
+  const unifiedReqId = useRef(0)
   const pageRef = useRef(0)
   const searchRef = useRef<HTMLInputElement>(null)
   const goChord = useRef(false)
@@ -126,13 +129,24 @@ export default function App(): JSX.Element {
   }, [])
 
   const pushToast = useCallback(
-    (text: string, tone: ToastTone = 'info', action?: Toast['action'], sticky?: boolean): string => {
+    (
+      text: string,
+      tone: ToastTone = 'info',
+      action?: Toast['action'],
+      sticky?: boolean,
+      extra?: Pick<Toast, 'secondaryAction' | 'durationMs'>
+    ): string => {
       const id = `t${++toastSeq}`
-      setToasts((prev) => [...prev.slice(-3), { id, text, tone, action, sticky }])
+      setToasts((prev) => [...prev.slice(-3), { id, text, tone, action, sticky, ...extra }])
       return id
     },
     []
   )
+
+  const copyCode = useCallback(async (code: string) => {
+    const res = await api.copyCode(code)
+    pushToast(res.ok ? 'Code kopiert' : `Kopieren fehlgeschlagen: ${res.error}`, res.ok ? 'success' : 'error')
+  }, [pushToast])
 
   const loadSettings = useCallback(async () => {
     const res = await api.settings.get()
@@ -169,33 +183,42 @@ export default function App(): JSX.Element {
   }, [])
 
   const loadMailboxes = useCallback(async (accountId: string) => {
+    const reqId = ++mailboxReqId.current
+    const cached = await api.mail.cachedMailboxes(accountId)
+    if (reqId !== mailboxReqId.current) return
+    setMailboxes(cached.ok ? cached.data ?? [] : [])
     const res = await api.mail.mailboxes(accountId)
-    if (res.ok) setMailboxes(res.data)
+    if (reqId === mailboxReqId.current && res.ok) setMailboxes(res.data)
   }, [])
 
   const loadMessages = useCallback(
     async (accountId: string, mailbox: string) => {
       const reqId = ++listReqId.current
       pageRef.current = 0
-      setHasMore(true)
+      setHasMore(false)
       setLoadingList(true)
+      setMessages([])
+      const cached = await api.mail.cachedMessages(accountId, mailbox)
+      if (reqId !== listReqId.current) return
+      const hadCache = cached.ok && cached.data !== null
+      if (hadCache) setMessages(cached.data ?? [])
       const res = await api.mail.messages(accountId, mailbox, 0)
       if (reqId !== listReqId.current) return
       setLoadingList(false)
       if (res.ok) {
         setMessages(res.data)
-        if (res.data.length < PAGE_SIZE) setHasMore(false)
+        setHasMore(res.data.length >= PAGE_SIZE)
         setLastSync(new Date().toISOString())
       } else {
-        setMessages([])
-        pushToast(`Ordner konnte nicht geladen werden: ${res.error}`, 'error')
+        if (!hadCache) setMessages([])
+        pushToast(`Aktualisierung fehlgeschlagen: ${res.error}`, 'error')
       }
     },
     [pushToast]
   )
 
   const loadMore = useCallback(async () => {
-    if (!activeAccountIdRef.current || loadingMore || !hasMore) return
+    if (!activeAccountIdRef.current || loadingList || loadingMore || !hasMore) return
     setLoadingMore(true)
     const next = pageRef.current + 1
     const res = await api.mail.messages(activeAccountIdRef.current, mailboxRef.current, next)
@@ -211,11 +234,16 @@ export default function App(): JSX.Element {
       pageRef.current = next
       setMessages((prev) => [...prev, ...fresh])
     }
-  }, [loadingMore, hasMore])
+  }, [loadingList, loadingMore, hasMore])
 
   const loadUnified = useCallback(async () => {
+    const reqId = ++unifiedReqId.current
     setLoadingList(true)
+    const cached = await api.mail.cachedUnified()
+    if (reqId !== unifiedReqId.current) return
+    if (cached.ok) setUnifiedMessages(cached.data)
     const res = await api.mail.unified()
+    if (reqId !== unifiedReqId.current) return
     setLoadingList(false)
     if (res.ok) setUnifiedMessages(res.data)
     else pushToast(`Gemeinsamer Posteingang: ${res.error}`, 'error')
@@ -348,13 +376,24 @@ export default function App(): JSX.Element {
       setStatusMsg((prev) => ({ ...prev, [s.accountId]: s.message }))
     })
     const offMail = api.onNewMail((evt) => {
+      const code = extractOneTimeCode(evt.message.subject, evt.message.snippet)
       if (evt.accountId.startsWith('temp:')) {
         setTempTick((n) => n + 1)
         if (!evt.focus) {
-          pushToast(`Neue E-Mail im Wegwerf-Postfach: ${evt.message.subject}`, 'info', {
-            label: 'Öffnen',
-            onClick: () => setView('temp')
-          })
+          pushToast(
+            `Neue E-Mail im Wegwerf-Postfach: ${evt.message.subject}${code ? ` · Code ${code}` : ''}`,
+            'info',
+            code
+              ? {
+                  label: 'Code kopieren',
+                  onClick: () => void copyCode(code)
+                }
+              : { label: 'Öffnen', onClick: () => setView('temp') },
+            false,
+            code
+              ? { secondaryAction: { label: 'Öffnen', onClick: () => setView('temp') }, durationMs: 20000 }
+              : undefined
+          )
         }
         return
       }
@@ -391,22 +430,26 @@ export default function App(): JSX.Element {
         }
         return
       }
-      pushToast(`Neue E-Mail · ${acc?.label ?? ''}: ${evt.message.subject}`, 'info', {
-        label: 'Öffnen',
-        onClick: () => {
-          setView('mail')
-          setActiveAccountId(evt.accountId)
-          setActiveMailbox(evt.mailbox)
-          void openMessageIn(evt.accountId, evt.mailbox, evt.message.uid)
-        }
-      })
+      const open = (): void => {
+        setView('mail')
+        setActiveAccountId(evt.accountId)
+        setActiveMailbox(evt.mailbox)
+        void openMessageIn(evt.accountId, evt.mailbox, evt.message.uid)
+      }
+      pushToast(
+        `Neue E-Mail · ${acc?.label ?? ''}: ${evt.message.subject}${code ? ` · Code ${code}` : ''}`,
+        'info',
+        code ? { label: 'Code kopieren', onClick: () => void copyCode(code) } : { label: 'Öffnen', onClick: open },
+        false,
+        code ? { secondaryAction: { label: 'Öffnen', onClick: open }, durationMs: 20000 } : undefined
+      )
     })
     return () => {
       offStatus()
       offMail()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadAccounts, loadSettings, loadMailboxes, loadUnified, openMessageIn, pushToast])
+  }, [loadAccounts, loadSettings, loadMailboxes, loadUnified, openMessageIn, pushToast, copyCode])
 
   useEffect(() => {
     if (!activeAccountId) return
@@ -415,8 +458,8 @@ export default function App(): JSX.Element {
     setChecked(new Set())
     setSearchResults(null)
     setActiveMailbox('INBOX')
-    loadMailboxes(activeAccountId)
-    loadMessages(activeAccountId, 'INBOX')
+    void loadMessages(activeAccountId, 'INBOX')
+    void loadMailboxes(activeAccountId)
   }, [activeAccountId, loadMailboxes, loadMessages])
 
   useEffect(() => {
@@ -621,8 +664,10 @@ export default function App(): JSX.Element {
       return
     }
     if (!activeAccountId) return
-    await loadMailboxes(activeAccountId)
-    await loadMessages(activeAccountId, mailboxRef.current)
+    await Promise.all([
+      loadMessages(activeAccountId, mailboxRef.current),
+      loadMailboxes(activeAccountId)
+    ])
   }, [
     view,
     searchResults,
@@ -1383,6 +1428,7 @@ export default function App(): JSX.Element {
               onArchive={() => selectedUid !== null && archive(selectedUid)}
               onToggleFlag={(v) => selectedUid !== null && toggleFlag(selectedUid, v)}
               onOpenExternal={(url) => api.openExternal(url)}
+              onCopyCode={(code) => void copyCode(code)}
               onSaveAttachment={saveAttachment}
               onPreviewAttachment={previewAttachment}
             />

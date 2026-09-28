@@ -20,6 +20,8 @@ Ein moderner Desktop-E-Mail-Client auf Basis von **Electron + React + TypeScript
 - **Posteingang lesen** – Ordnerliste mit Ungelesen-Zählern, Nachrichtenliste mit
   Vorschau, HTML-Ansicht in einer abgeschotteten Sandbox, Anhänge-Übersicht mit
   Bild-/PDF-Vorschau, endloses Nachladen älterer Mails.
+- **Schnelleres Öffnen** – zuletzt geladene Ordner und Nachrichtenlisten erscheinen
+  sofort aus einem verschlüsselten lokalen Cache und werden im Hintergrund aktualisiert.
 - **Konversationen** – Nachrichten lassen sich nach Thread gruppieren (References/Betreff).
 - **Gemeinsamer Posteingang** – ein zusammengeführter INBOX-Blick über alle Konten.
 - **Server-Suche** – Volltextsuche per IMAP im aktuellen Ordner oder allen Ordnern.
@@ -28,6 +30,9 @@ Ein moderner Desktop-E-Mail-Client auf Basis von **Electron + React + TypeScript
 - **Desktop-Benachrichtigungen** – dauerhafte IMAP-IDLE-Verbindung pro Konto; native
   System-Benachrichtigung mit Aktionen (Antworten, Archivieren), einstellbar auf
   alle Ordner / nur Posteingang / aus.
+- **Einmalcodes kopieren** – erkannte Login-Codes (z. B. von Twitch) lassen sich im
+  App-Popup oder in der Nachricht kopieren; ein Klick auf die Windows-Benachrichtigung
+  kopiert den Code direkt in die Zwischenablage.
 - **Externe Inhalte blockieren** – Bilder und Tracker in HTML-Mails werden bis zur
   Freigabe geblockt; Absender lassen sich dauerhaft freischalten.
 - **Nachrichten verwalten** – als gelesen/ungelesen markieren, mit Stern versehen, löschen.
