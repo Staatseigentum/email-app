@@ -10,9 +10,7 @@ export class MailManager extends EventEmitter {
   private connections = new Map<string, MailConnection>()
 
   async startAll(): Promise<void> {
-    for (const acc of accountStore.list()) {
-      await this.startAccount(acc.id)
-    }
+    await Promise.all(accountStore.list().map((acc) => this.startAccount(acc.id)))
   }
 
   async startAccount(id: string): Promise<void> {

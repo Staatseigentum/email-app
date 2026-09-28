@@ -35,8 +35,12 @@ const api = {
   mail: {
     mailboxes: (id: string): Promise<IpcResult<MailboxNode[]>> =>
       ipcRenderer.invoke(IPC.mailboxes, id),
+    cachedMailboxes: (id: string): Promise<IpcResult<MailboxNode[] | null>> =>
+      ipcRenderer.invoke(IPC.cachedMailboxes, id),
     messages: (id: string, mailbox: string, page = 0): Promise<IpcResult<MessageSummary[]>> =>
       ipcRenderer.invoke(IPC.messages, id, mailbox, page),
+    cachedMessages: (id: string, mailbox: string): Promise<IpcResult<MessageSummary[] | null>> =>
+      ipcRenderer.invoke(IPC.cachedMessages, id, mailbox),
     message: (id: string, mailbox: string, uid: number): Promise<IpcResult<MessageDetail>> =>
       ipcRenderer.invoke(IPC.message, id, mailbox, uid),
     markSeen: (id: string, mailbox: string, uid: number, value: boolean): Promise<IpcResult<void>> =>
@@ -70,6 +74,8 @@ const api = {
     search: (q: SearchQuery): Promise<IpcResult<MessageSummary[]>> =>
       ipcRenderer.invoke(IPC.search, q),
     unified: (): Promise<IpcResult<MessageSummary[]>> => ipcRenderer.invoke(IPC.unified),
+    cachedUnified: (): Promise<IpcResult<MessageSummary[]>> =>
+      ipcRenderer.invoke(IPC.cachedUnified),
     sync: (id: string): Promise<IpcResult<boolean>> => ipcRenderer.invoke(IPC.sync, id)
   },
   settings: {
@@ -99,6 +105,7 @@ const api = {
   openExternal: (url: string): Promise<IpcResult<boolean>> =>
     ipcRenderer.invoke(IPC.openExternal, url),
   appVersion: (): Promise<IpcResult<string>> => ipcRenderer.invoke(IPC.appVersion),
+  copyCode: (code: string): Promise<IpcResult<boolean>> => ipcRenderer.invoke(IPC.copyCode, code),
   oauth: {
     start: (provider: OAuthProvider): Promise<IpcResult<OAuthResult>> =>
       ipcRenderer.invoke(IPC.oauthStart, provider),

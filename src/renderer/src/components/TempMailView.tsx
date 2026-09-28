@@ -307,6 +307,11 @@ export function TempMailView(props: {
           onForward={NOOP}
           onDelete={NOOP}
           onOpenExternal={props.onOpenExternal}
+          onCopyCode={(code) => {
+            void api.copyCode(code).then((res) =>
+              props.onToast(res.ok ? 'Code kopiert' : `Kopieren fehlgeschlagen: ${res.error}`, res.ok ? 'success' : 'error')
+            )
+          }}
           onSaveAttachment={saveAttachment}
           readOnly
         />

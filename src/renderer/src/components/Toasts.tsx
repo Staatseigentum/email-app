@@ -9,6 +9,8 @@ export interface Toast {
   title?: string
   tone?: ToastTone
   action?: { label: string; onClick: () => void }
+  secondaryAction?: { label: string; onClick: () => void }
+  durationMs?: number
   /** Bleibt stehen, bis er programmatisch geschlossen wird. */
   sticky?: boolean
 }
@@ -25,10 +27,10 @@ function ToastCard(props: { toast: Toast; onClose: (id: string) => void }): JSX.
 
   useEffect(() => {
     if (toast.sticky) return
-    const ms = toast.tone === 'error' ? 7000 : 4500
+    const ms = toast.durationMs ?? (toast.tone === 'error' ? 7000 : 4500)
     const t = setTimeout(() => onClose(toast.id), ms)
     return () => clearTimeout(t)
-  }, [toast.id, toast.tone, toast.sticky, onClose])
+  }, [toast.id, toast.tone, toast.sticky, toast.durationMs, onClose])
 
   return (
     <div className="animate-toast-in pointer-events-auto flex w-[340px] items-start gap-2.5 rounded-lg border border-line bg-chrome p-3 shadow-popover">
@@ -45,6 +47,17 @@ function ToastCard(props: { toast: Toast; onClose: (id: string) => void }): JSX.
             className="mt-1 text-2xs font-semibold text-accent-text hover:underline"
           >
             {toast.action.label}
+          </button>
+        )}
+        {toast.secondaryAction && (
+          <button
+            onClick={() => {
+              toast.secondaryAction?.onClick()
+              onClose(toast.id)
+            }}
+            className="ml-3 mt-1 text-2xs font-medium text-ink-soft hover:text-ink hover:underline"
+          >
+            {toast.secondaryAction.label}
           </button>
         )}
       </div>

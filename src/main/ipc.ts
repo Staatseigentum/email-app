@@ -1,6 +1,7 @@
-import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Notification, shell } from 'electron'
 import { readFileSync, writeFileSync } from 'fs'
 import { IPC } from '../shared/ipc'
+import { extractOneTimeCode } from '../shared/oneTimeCode'
 import type {
   AppSettings,
   ComposePayload,
@@ -13,6 +14,7 @@ import type {
   SearchQuery
 } from '../shared/types'
 import { accountStore } from './store'
+import { mailCache } from './mailCache'
 import { settingsStore } from './settings'
 import { mailManager } from './mail/manager'
 import { testConnection } from './mail/imapClient'
@@ -24,6 +26,7 @@ import { oauthConfig, parseGoogleCredentials } from './oauthConfig'
 import { notificationIconPath } from './assets'
 
 export const tempMail = new TempMailService(mailManager)
+const activeNotifications = new Set<Notification>()
 
 async function wrap<T>(fn: () => Promise<T>): Promise<IpcResult<T>> {
   try {
@@ -69,24 +72,32 @@ export function registerIpc(): void {
   mailManager.on('newMail', (evt: NewMailEvent) => {
     broadcast(IPC.onNewMail, evt)
     const isTemp = evt.accountId.startsWith('temp:')
+    if (!isTemp) mailCache.addNew(evt.accountId, evt.mailbox, evt.message)
     const acc = isTemp ? undefined : accountStore.get(evt.accountId)
     const context = isTemp ? 'Wegwerf-Postfach' : acc?.label
     const notify = settingsStore.get().notify
     const allowed =
       notify === 'all' || (notify === 'inbox' && (isTemp || evt.mailbox === 'INBOX'))
     if (allowed && Notification.isSupported()) {
+      const code = extractOneTimeCode(evt.message.subject, evt.message.snippet)
       const preview = evt.message.snippet
         ? `${evt.message.subject}\n${evt.message.snippet}`
         : evt.message.subject
       const icon = notificationIconPath()
       const n = new Notification({
         title: evt.message.fromName,
-        body: preview,
+        body: code ? `${preview}\nCode ${code} · Klicken zum Kopieren` : preview,
         subtitle: context,
         silent: false,
-        actions: isTemp ? [] : [{ type: 'button', text: 'Antworten' }, { type: 'button', text: 'Archivieren' }],
+        actions: code
+          ? [{ type: 'button', text: 'Code kopieren' }]
+          : isTemp
+            ? []
+            : [{ type: 'button', text: 'Antworten' }, { type: 'button', text: 'Archivieren' }],
         ...(icon ? { icon } : {})
       })
+      activeNotifications.add(n)
+      setTimeout(() => activeNotifications.delete(n), 10 * 60 * 1000).unref()
       const focusWin = (): BrowserWindow | undefined => {
         const win = BrowserWindow.getAllWindows()[0]
         if (win) {
@@ -95,8 +106,17 @@ export function registerIpc(): void {
         }
         return win
       }
-      n.on('click', () => focusWin()?.webContents.send(IPC.onNewMail, { ...evt, focus: true }))
+      n.on('click', () => {
+        activeNotifications.delete(n)
+        if (code) clipboard.writeText(code)
+        else focusWin()?.webContents.send(IPC.onNewMail, { ...evt, focus: true })
+      })
       n.on('action', (_e, index) => {
+        activeNotifications.delete(n)
+        if (code) {
+          if (index === 0) clipboard.writeText(code)
+          return
+        }
         if (index === 0) {
           focusWin()?.webContents.send(IPC.onNewMail, { ...evt, focus: true, reply: true })
         } else if (index === 1) {
@@ -119,6 +139,7 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.accountsSave, (_e, input: MailAccountInput) =>
     wrap(async () => {
       const saved = accountStore.save(input)
+      mailCache.clearAccount(saved.id)
       await mailManager.restartAccount(saved.id)
       return saved
     })
@@ -128,6 +149,7 @@ export function registerIpc(): void {
     wrap(async () => {
       await mailManager.stopAccount(id)
       accountStore.delete(id)
+      mailCache.clearAccount(id)
       return true
     })
   )
@@ -174,12 +196,28 @@ export function registerIpc(): void {
     })
   )
 
+  ipcMain.handle(IPC.cachedMailboxes, (_e, id: string) =>
+    wrap(async () => (accountStore.get(id) ? mailCache.mailboxes(id) : null))
+  )
+
+  ipcMain.handle(IPC.cachedMessages, (_e, id: string, mailbox: string) =>
+    wrap(async () => (accountStore.get(id) ? mailCache.messages(id, mailbox) : null))
+  )
+
   ipcMain.handle(IPC.mailboxes, (_e, id: string) =>
-    wrap(() => mailManager.get(id).listMailboxes())
+    wrap(async () => {
+      const boxes = await mailManager.get(id).listMailboxes()
+      if (accountStore.get(id)) mailCache.saveMailboxes(id, boxes)
+      return boxes
+    })
   )
 
   ipcMain.handle(IPC.messages, (_e, id: string, mailbox: string, page: number) =>
-    wrap(() => mailManager.get(id).listMessages(mailbox, page))
+    wrap(async () => {
+      const messages = await mailManager.get(id).listMessages(mailbox, page)
+      if (page === 0 && accountStore.get(id)) mailCache.saveMessages(id, mailbox, messages)
+      return messages
+    })
   )
 
   ipcMain.handle(IPC.message, (_e, id: string, mailbox: string, uid: number) =>
@@ -187,25 +225,41 @@ export function registerIpc(): void {
   )
 
   ipcMain.handle(IPC.markSeen, (_e, id: string, mailbox: string, uid: number, value: boolean) =>
-    wrap(() => mailManager.get(id).setFlag(mailbox, uid, '\\Seen', value))
+    wrap(async () => {
+      await mailManager.get(id).setFlag(mailbox, uid, '\\Seen', value)
+      mailCache.setFlag(id, mailbox, uid, 'seen', value)
+    })
   )
 
   ipcMain.handle(IPC.markAllSeen, (_e, id: string, mailbox: string) =>
-    wrap(() => mailManager.get(id).markAllSeen(mailbox))
+    wrap(async () => {
+      await mailManager.get(id).markAllSeen(mailbox)
+      mailCache.markAllSeen(id, mailbox)
+    })
   )
 
   ipcMain.handle(IPC.flag, (_e, id: string, mailbox: string, uid: number, value: boolean) =>
-    wrap(() => mailManager.get(id).setFlag(mailbox, uid, '\\Flagged', value))
+    wrap(async () => {
+      await mailManager.get(id).setFlag(mailbox, uid, '\\Flagged', value)
+      mailCache.setFlag(id, mailbox, uid, 'flagged', value)
+    })
   )
 
   ipcMain.handle(IPC.deleteMessage, (_e, id: string, mailbox: string, uid: number) =>
-    wrap(() => mailManager.get(id).deleteMessage(mailbox, uid))
+    wrap(async () => {
+      await mailManager.get(id).deleteMessage(mailbox, uid)
+      mailCache.remove(id, mailbox, uid)
+    })
   )
 
   ipcMain.handle(
     IPC.moveMessage,
     (_e, id: string, mailbox: string, uid: number, target: string) =>
-      wrap(() => mailManager.get(id).moveMessage(mailbox, uid, target))
+      wrap(async () => {
+        await mailManager.get(id).moveMessage(mailbox, uid, target)
+        mailCache.remove(id, mailbox, uid)
+        mailCache.invalidate(id, target)
+      })
   )
 
   ipcMain.handle(IPC.search, (_e, q: SearchQuery) =>
@@ -218,6 +272,7 @@ export function registerIpc(): void {
         mailManager.entries().map(async ([id, conn]) => {
           try {
             const msgs = await conn.listMessages('INBOX', 0)
+            mailCache.saveMessages(id, 'INBOX', msgs)
             return msgs.map((m) => ({ ...m, accountId: id, mailbox: 'INBOX' }))
           } catch {
             return [] as MessageSummary[]
@@ -231,10 +286,27 @@ export function registerIpc(): void {
     })
   )
 
+  ipcMain.handle(IPC.cachedUnified, () =>
+    wrap(async () =>
+      accountStore.list()
+        .flatMap((acc) =>
+          (mailCache.messages(acc.id, 'INBOX') ?? []).map((m) => ({
+            ...m,
+            accountId: acc.id,
+            mailbox: 'INBOX'
+          }))
+        )
+        .sort((a, b) => +new Date(b.date) - +new Date(a.date))
+        .slice(0, 120)
+    )
+  )
+
   ipcMain.handle(IPC.saveDraft, (_e, payload: DraftPayload) =>
     wrap(async () => {
       const mime = await buildMime(payload)
-      return mailManager.get(payload.accountId).saveDraft(mime, payload.replaceUid)
+      const saved = await mailManager.get(payload.accountId).saveDraft(mime, payload.replaceUid)
+      mailCache.invalidate(payload.accountId, saved.mailbox)
+      return saved
     })
   )
 
@@ -245,6 +317,15 @@ export function registerIpc(): void {
   )
 
   ipcMain.handle(IPC.appVersion, () => wrap(async () => app.getVersion()))
+  ipcMain.handle(IPC.copyCode, (_e, code: string) =>
+    wrap(async () => {
+      if (typeof code !== 'string' || !/^\d{4,8}$/.test(code)) {
+        throw new Error('Ungültiger Einmalcode')
+      }
+      clipboard.writeText(code)
+      return true
+    })
+  )
 
   ipcMain.handle(IPC.settingsGet, () => wrap(async () => settingsStore.get()))
   ipcMain.handle(IPC.settingsSet, (_e, patch: Partial<AppSettings>) =>
