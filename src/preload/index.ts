@@ -127,6 +127,7 @@ const api = {
   update: {
     check: (): Promise<UpdateInfo | null> => ipcRenderer.invoke(IPC.updateCheck),
     apply: (): Promise<void> => ipcRenderer.invoke(IPC.updateApply),
+    state: (): Promise<UpdateEvent> => ipcRenderer.invoke(IPC.updateState),
     on: (cb: (e: UpdateEvent) => void): (() => void) => {
       const handler = (_e: unknown, evt: UpdateEvent): void => cb(evt)
       ipcRenderer.on(IPC.onUpdate, handler)

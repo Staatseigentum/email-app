@@ -4,7 +4,7 @@
 // Update das neue Setup herunter, kopiert diesen Updater in einen Temp-Ordner
 // und startet ihn dort:
 //
-//   Updater.exe --setup "<neues Setup>.exe" --wait <pid> --launch "<MailWave.exe>"
+//   Updater.exe --setup "<neues Setup>.exe" --wait <pid> --launch "<MailWave.exe>" --version x.y.z
 //
 // Ablauf: auf Beenden der App warten -> Setup still ausführen (/S /update)
 //         -> App neu starten -> Setup-Datei aufräumen.
@@ -25,64 +25,105 @@ internal static class Updater
         var args = ParseArgs(rawArgs);
         string setup = Get(args, "setup");
         string launch = Get(args, "launch");
+        string expectedVersion = Get(args, "version");
         int waitPid = -1;
         int.TryParse(Get(args, "wait"), out waitPid);
 
-        if (string.IsNullOrEmpty(setup) || !File.Exists(setup))
+        if (string.IsNullOrEmpty(setup) || !File.Exists(setup) ||
+            string.IsNullOrEmpty(launch) || !File.Exists(launch))
         {
-            Fail("Aktualisierungspaket wurde nicht gefunden.");
+            Fail("Aktualisierungspaket oder installierte MailWave-App wurde nicht gefunden.");
             return 2;
         }
 
-        WaitForExit(waitPid, TimeSpan.FromSeconds(30));
+        if (!WaitForExit(waitPid, TimeSpan.FromSeconds(90)))
+        {
+            Fail("MailWave konnte nicht beendet werden. Die Aktualisierung wurde abgebrochen.");
+            return 4;
+        }
 
         // Kurzer Puffer, damit Dateisperren wirklich frei sind.
         Thread.Sleep(800);
 
         try
         {
-            var psi = new ProcessStartInfo(setup, "/S /update")
+            string installDir = Path.GetDirectoryName(Path.GetFullPath(launch));
+            var psi = new ProcessStartInfo(setup, "/S /update /D=\"" + installDir + "\"")
             {
-                UseShellExecute = true,
-                WindowStyle = ProcessWindowStyle.Hidden
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
+                WorkingDirectory = Path.GetDirectoryName(setup)
             };
-            var p = Process.Start(psi);
-            p.WaitForExit();
-            if (p.ExitCode != 0)
+            using (var p = Process.Start(psi))
             {
-                Fail("Die Aktualisierung ist fehlgeschlagen (Code " + p.ExitCode + ").");
-                return p.ExitCode;
+                if (p == null) throw new InvalidOperationException("Setup konnte nicht gestartet werden.");
+                p.WaitForExit();
+                if (p.ExitCode != 0)
+                {
+                    Fail("Die Aktualisierung ist fehlgeschlagen (Code " + p.ExitCode + ").");
+                    TryLaunch(launch);
+                    return p.ExitCode;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(expectedVersion))
+            {
+                string versionFile = Path.Combine(installDir, "resources", "mailwave-version.txt");
+                string installedVersion = File.Exists(versionFile)
+                    ? File.ReadAllText(versionFile).Trim() : "";
+                if (!expectedVersion.Equals(installedVersion, StringComparison.OrdinalIgnoreCase))
+                {
+                    Fail("Die Installation wurde nicht am erwarteten Ort abgeschlossen. " +
+                         "MailWave bitte manuell aktualisieren.");
+                    TryLaunch(launch);
+                    return 6;
+                }
             }
         }
         catch (Exception ex)
         {
             Fail("Die Aktualisierung ist fehlgeschlagen:\n" + ex.Message);
+            TryLaunch(launch);
             return 3;
         }
 
-        if (!string.IsNullOrEmpty(launch) && File.Exists(launch))
+        if (!TryLaunch(launch))
         {
-            try
-            {
-                Process.Start(new ProcessStartInfo(launch) { UseShellExecute = true });
-            }
-            catch { /* Neustart ist optional */ }
+            Fail("Die Aktualisierung wurde installiert, aber MailWave konnte nicht neu " +
+                 "gestartet werden. Bitte die App manuell öffnen.");
+            return 5;
         }
 
         TryCleanup(setup);
         return 0;
     }
 
-    private static void WaitForExit(int pid, TimeSpan timeout)
+    private static bool WaitForExit(int pid, TimeSpan timeout)
     {
-        if (pid <= 0) return;
+        if (pid <= 0) return false;
         try
         {
-            var proc = Process.GetProcessById(pid);
-            proc.WaitForExit((int)timeout.TotalMilliseconds);
+            using (var proc = Process.GetProcessById(pid))
+                return proc.WaitForExit((int)timeout.TotalMilliseconds);
         }
-        catch (ArgumentException) { /* schon beendet */ }
-        catch { /* egal – wir versuchen es trotzdem */ }
+        catch (ArgumentException) { return true; /* schon beendet */ }
+        catch { return false; }
+    }
+
+    private static bool TryLaunch(string launch)
+    {
+        try
+        {
+            if (!File.Exists(launch)) return false;
+            var psi = new ProcessStartInfo(launch)
+            {
+                UseShellExecute = true,
+                WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(launch))
+            };
+            return Process.Start(psi) != null;
+        }
+        catch { return false; }
     }
 
     private static void TryCleanup(string setup)

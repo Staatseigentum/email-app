@@ -75,14 +75,18 @@ npm run release    # GitHub-Release anlegen und die Setup-EXE hochladen
 
 ### Automatische Updates
 
-Die App fragt beim Start (und alle 6 h) das neueste GitHub-Release ab. Ist eine
-neuere Version da, erscheint eine Meldung mit *Jetzt aktualisieren*. Dann:
+Die App prüft beim Start das neueste stabile GitHub-Release und installiert ein
+neueres Update automatisch. Während des Downloads wird der Fortschritt angezeigt.
+Danach:
 
 1. die neue Setup-EXE wird nach `%TEMP%` geladen
 2. der mitgelieferte **Bootstrap-Updater** (`Updater.exe`) wird nach `%TEMP%` kopiert
    und gestartet
-3. MailWave beendet sich, der Updater führt `Setup.exe /S /update` aus und startet
-   die App neu
+3. MailWave beendet sich, der Updater führt `Setup.exe /S /update` im vorhandenen
+   Installationsordner aus, prüft die installierte Version und startet die App neu
+
+Alle 6 Stunden wird zusätzlich nach Updates gesucht; dabei erscheint eine Meldung
+mit *Jetzt aktualisieren* für die manuelle Installation.
 
 Das Repo für die Update-Prüfung steht in `package.json` unter `mailwave.updateRepo`.
 

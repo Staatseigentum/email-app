@@ -6,7 +6,8 @@ import type {
   MailAccount,
   MailboxNode,
   MessageDetail,
-  MessageSummary
+  MessageSummary,
+  UpdateEvent
 } from '../../shared/types'
 import { extractOneTimeCode } from '../../shared/oneTimeCode'
 import { AccountRail } from './components/AccountRail'
@@ -92,6 +93,7 @@ export default function App(): JSX.Element {
   const searchRef = useRef<HTMLInputElement>(null)
   const goChord = useRef(false)
   const undoRef = useRef<{ timer: number; toastId: string; payload: ComposePayload } | null>(null)
+  const updateToastIdRef = useRef<string | null>(null)
   const activeAccountIdRef = useRef<string | null>(null)
   const mailboxRef = useRef('INBOX')
   const accountsRef = useRef<MailAccount[]>([])
@@ -349,23 +351,42 @@ export default function App(): JSX.Element {
   )
 
   useEffect(() => {
-    const off = api.update.on((evt) => {
+    const onUpdate = (evt: UpdateEvent): void => {
       if (evt.state === 'available') {
         pushToast(`MailWave ${evt.info.version} ist verfügbar.`, 'info', {
           label: 'Jetzt aktualisieren',
           onClick: () => {
-            pushToast('Update wird geladen … die App startet gleich neu.', 'info')
             void api.update.apply()
           }
         })
+      } else if (evt.state === 'downloading' || evt.state === 'ready') {
+        const text = evt.state === 'downloading'
+          ? `MailWave ${evt.info.version} wird geladen … ${evt.progress}%`
+          : `MailWave ${evt.info.version} wird installiert. Die App startet gleich neu …`
+        const id = updateToastIdRef.current ?? `t${++toastSeq}`
+        updateToastIdRef.current = id
+        setToasts((prev) => {
+          const toast: Toast = { id, text, tone: 'info', sticky: true }
+          return prev.some((t) => t.id === id)
+            ? prev.map((t) => (t.id === id ? toast : t))
+            : [...prev.slice(-3), toast]
+        })
       } else if (evt.state === 'error') {
-        pushToast(`Update-Prüfung fehlgeschlagen: ${evt.message}`, 'error')
+        if (updateToastIdRef.current) dismissToast(updateToastIdRef.current)
+        updateToastIdRef.current = null
+        pushToast(`Aktualisierung fehlgeschlagen: ${evt.message}`, 'error')
       } else if (evt.state === 'none') {
         pushToast('MailWave ist aktuell.', 'success')
       }
+    }
+    const off = api.update.on(onUpdate)
+    void api.update.state().then((evt) => {
+      if (!updateToastIdRef.current && (evt.state === 'downloading' || evt.state === 'ready')) {
+        onUpdate(evt)
+      }
     })
     return off
-  }, [pushToast])
+  }, [pushToast, dismissToast])
 
   useEffect(() => {
     loadAccounts()

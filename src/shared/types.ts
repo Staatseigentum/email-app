@@ -161,6 +161,8 @@ export interface UpdateInfo {
   notes: string
   url: string
   size: number
+  /** SHA-256 aus dem GitHub-Release-Asset, wenn vorhanden. */
+  sha256?: string
 }
 
 export type UpdateEvent =

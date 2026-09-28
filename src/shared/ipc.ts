@@ -43,6 +43,7 @@ export const IPC = {
   // Auto-Update
   updateCheck: 'update:check',
   updateApply: 'update:apply',
+  updateState: 'update:state',
   // Fenstersteuerung (eigene Titelleiste)
   winMinimize: 'win:minimize',
   winMaximizeToggle: 'win:maximizeToggle',

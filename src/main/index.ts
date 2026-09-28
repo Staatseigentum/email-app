@@ -49,8 +49,8 @@ function createWindow(): void {
 app.whenReady().then(async () => {
   app.setAppUserModelId('de.marcoebner.mailwave')
   registerIpc()
-  initUpdater()
   createWindow()
+  initUpdater()
   await mailManager.startAll()
 
   app.on('activate', () => {
